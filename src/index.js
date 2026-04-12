@@ -9,12 +9,37 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 
-// Middleware
-app.use(cors());
+
+// ==================== ✅ CORS CONFIG (FIXED) ====================
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://laundrica-l2b5.vercel.app/', // 🔁 replace with your real frontend URL
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // allow requests with no origin (like Postman)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  credentials: true,
+};
+
+// ✅ Apply CORS BEFORE everything
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // 🔥 handle preflight
+
+
+// ==================== MIDDLEWARE ====================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+
+// ==================== ROUTES ====================
 const authRoutes = require('./routes/auth.routes');
 const productRoutes = require('./routes/product.routes');
 const orderRoutes = require('./routes/order.routes');
@@ -23,36 +48,42 @@ const adminRoutes = require('./routes/admin.routes');
 const serviceRoutes = require('./routes/service.routes');
 const cartRoutes = require('./routes/cart.routes');
 
-// Mount routes - IMPORTANT: order routes must be mounted
+// Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);  // ✅ This must be present
+app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/cart', cartRoutes);
 
-// Health check endpoint
+
+// ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is running' });
 });
 
-// Error handling middleware
+
+// ==================== ERROR HANDLER ====================
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('❌ ERROR:', err.stack);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
   });
 });
 
-// Connect to MongoDB
+
+// ==================== DB CONNECTION ====================
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch((err) => console.error('❌ MongoDB connection error:', err));
 
+
+// ==================== SERVER ====================
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📦 API endpoints:`);
