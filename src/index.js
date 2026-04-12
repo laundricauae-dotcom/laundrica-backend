@@ -9,42 +9,11 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 
-// ==================== ✅ CORS CONFIG (FINAL) ====================
-
-// 👉 Allow localhost + ALL Vercel deployments dynamically
-const allowedOrigins = [
-  'http://localhost:3000',
-];
-
-// ✅ Dynamic origin handler (best for Vercel preview URLs)
-const corsOptions = {
-  origin: function (origin, callback) {
-    // allow requests without origin (Postman, mobile apps)
-    if (!origin) return callback(null, true);
-
-    // allow localhost
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // allow ANY vercel app
-    if (origin.includes('.vercel.app')) {
-      return callback(null, true);
-    }
-
-    console.log('❌ Blocked by CORS:', origin);
-    callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true,
-};
-
-// ✅ Apply CORS middleware
-app.use(cors());
-
-// ✅ Handle preflight requests
-app.options('*', cors());
-
+// ==================== ✅ CORS (ALLOW ALL DOMAINS) ====================
+app.use(cors({
+  origin: true,        // ✅ allow any domain dynamically
+  credentials: true,   // ✅ allow cookies/auth headers if needed
+}));
 
 // ==================== MIDDLEWARE ====================
 app.use(express.json());
@@ -74,7 +43,7 @@ app.use('/api/cart', cartRoutes);
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Server is running',
+    message: 'Server is running 🚀',
   });
 });
 
@@ -106,7 +75,8 @@ app.listen(PORT, () => {
   console.log(`   - /api/auth`);
   console.log(`   - /api/products`);
   console.log(`   - /api/orders`);
-  console.log(`   - /api/cart`);
+  console.log(`   - /api/users`);
   console.log(`   - /api/admin`);
   console.log(`   - /api/services`);
+  console.log(`   - /api/cart`);
 });
