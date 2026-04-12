@@ -31,7 +31,7 @@ const corsOptions = {
 
 // ✅ Apply CORS BEFORE everything
 app.use(cors(corsOptions));
-app.options('/*', cors(corsOptions)); // 🔥 handle preflight
+app.use(cors(corsOptions)); // 🔥 handle preflight
 
 
 // ==================== MIDDLEWARE ====================
