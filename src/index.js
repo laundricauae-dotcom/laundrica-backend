@@ -4,34 +4,46 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 
-// Load env variables
+// ==================== LOAD ENV ====================
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 
+// ==================== ✅ CORS CONFIG (FINAL) ====================
 
-// ==================== ✅ CORS CONFIG (FIXED) ====================
+// 👉 Allow localhost + ALL Vercel deployments dynamically
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://laundrica-l2b5.vercel.app/', // 🔁 replace with your real frontend URL
 ];
 
+// ✅ Dynamic origin handler (best for Vercel preview URLs)
 const corsOptions = {
   origin: function (origin, callback) {
-    // allow requests with no origin (like Postman)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // allow requests without origin (Postman, mobile apps)
+    if (!origin) return callback(null, true);
+
+    // allow localhost
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+
+    // allow ANY vercel app
+    if (origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    console.log('❌ Blocked by CORS:', origin);
+    callback(new Error('Not allowed by CORS'));
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
 };
 
-// ✅ Apply CORS BEFORE everything
+// ✅ Apply CORS middleware
 app.use(cors(corsOptions));
-app.use(cors(corsOptions)); // 🔥 handle preflight
+
+// ✅ Handle preflight requests
+app.options('*', cors(corsOptions));
 
 
 // ==================== MIDDLEWARE ====================
@@ -60,13 +72,17 @@ app.use('/api/cart', cartRoutes);
 
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ success: true, message: 'Server is running' });
+  res.status(200).json({
+    success: true,
+    message: 'Server is running',
+  });
 });
 
 
 // ==================== ERROR HANDLER ====================
 app.use((err, req, res, next) => {
   console.error('❌ ERROR:', err.stack);
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
@@ -92,4 +108,5 @@ app.listen(PORT, () => {
   console.log(`   - /api/orders`);
   console.log(`   - /api/cart`);
   console.log(`   - /api/admin`);
+  console.log(`   - /api/services`);
 });
