@@ -1,129 +1,66 @@
 const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.Mixed,
-  },
-  name: {
-    type: String,
-    required: true,
-  },
-  price: {
-    type: Number,
-    required: true,
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-  },
+  productId: { type: String, default: null },
+  name: { type: String, required: true },
+  price: { type: Number, required: true },
+  quantity: { type: Number, required: true, min: 1 },
   image: String,
-  serviceItems: [
-    {
-      itemId: String,
-      name: String,
-      price: Number,
-      quantity: Number,
-    },
-  ],
-});
-
-const trackingHistorySchema = new mongoose.Schema({
-  status: {
-    type: String,
-    enum: [
-      'pending','confirmed','processing','picked_up','washing','drying',
-      'ironing','quality_check','ready_for_pickup','out_for_delivery',
-      'delivered','cancelled'
-    ],
-    required: true,
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now,
-  },
-  description: String,
-  location: String,
+  serviceItems: [{
+    itemId: String,
+    name: String,
+    price: Number,
+    quantity: Number,
+  }],
+  selectedColor: String,
+  selectedSize: String,
+  designImage: String,
 });
 
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: { type: String, unique: true },
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
+    sessionId: { type: String, required: true },
     items: [orderItemSchema],
     subtotal: { type: Number, required: true, default: 0 },
-    deliveryFee: { type: Number, default: 0 },
+    deliveryFee: { type: Number, default: 15 },
     tax: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
     total: { type: Number, required: true },
-
     status: {
       type: String,
-      enum: [
-        'pending','confirmed','processing','picked_up','washing','drying',
-        'ironing','quality_check','ready_for_pickup','out_for_delivery',
-        'delivered','cancelled'
-      ],
+      enum: ['pending', 'processing', 'completed', 'cancelled'],
       default: 'pending',
     },
-
-    paymentMethod: {
-      type: String,
-      enum: ['card','cash','wallet'],
-      default: 'card',
+    customerInfo: {
+      name: { type: String, required: true },
+      phone: { type: String, required: true },
+      email: { type: String, default: '' },
+      address: { type: String, required: true },
+      city: { type: String, default: 'Dubai' },
+      notes: { type: String, default: '' },
     },
-
-    tracking: {
-      trackingNumber: String,
-      currentStatus: { type: String, default: 'pending' },
-      history: [trackingHistorySchema],
-      estimatedDelivery: Date,
-    },
-
-    shippingAddress: {
-      firstName: String,
-      lastName: String,
-      email: String,
-      phone: String,
-      address: String,
-      city: String,
-      state: String,
-      zipCode: String,
-    },
-
-    pickupDetails: {
-      date: Date,
-      time: String,
-      instructions: String,
-    },
-
-    specialInstructions: String,
+    // WhatsApp tracking
+    whatsappMessageId: { type: String, default: null },
+    whatsappSent: { type: Boolean, default: false },
+    whatsappSentAt: { type: Date, default: null },
+    // Zoho CRM tracking
+    zohoSynced: { type: Boolean, default: false },
+    zohoDealId: { type: String, default: null },
+    zohoContactId: { type: String, default: null },
+    zohoSyncedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// ✅ FIXED: Use async function WITHOUT calling next()
-orderSchema.pre('save', async function() {
-  // Generate order number if not exists
+// Generate order number before saving
+orderSchema.pre('save', async function () {
   if (!this.orderNumber) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const count = await this.constructor.countDocuments();
     this.orderNumber = `ORD-${year}${month}-${(count + 1).toString().padStart(5, '0')}`;
-  }
-
-  // Generate tracking number if not exists
-  if (!this.tracking || !this.tracking.trackingNumber) {
-    const { generateTrackingNumber } = require('../utils/tracking');
-    if (!this.tracking) {
-      this.tracking = {};
-    }
-    this.tracking.trackingNumber = generateTrackingNumber();
   }
 });
 

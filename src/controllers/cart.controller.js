@@ -1,542 +1,261 @@
-// controllers/cart.controller.js
-const mongoose = require('mongoose');
 const Cart = require('../models/Cart');
-const Product = require('../models/Product');
-const Coupon = require('../models/Coupon');
+const { v4: uuidv4 } = require('uuid');
 
-// Get user's cart
+// Helper to get or validate session
+const getSessionCart = async (sessionId) => {
+  let cart = await Cart.findOne({ sessionId });
+  if (!cart) {
+    cart = await Cart.create({ sessionId, items: [] });
+  }
+  return cart;
+};
+
+// Get cart
 exports.getCart = async (req, res) => {
   try {
-    let cart = await Cart.findOne({ user: req.user.id }).populate('items.productId', 'name price images inStock');
-    
-    if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [] });
-    }
-    
-    // Transform items to match frontend expected format
-    const transformedItems = cart.items.map(item => ({
-      id: item._id.toString(),
-      productId: item.productId?._id || item.productId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      category: item.category,
-      description: item.description,
-      serviceItems: item.serviceItems || [],
-      selectedColor: item.selectedColor,
-      selectedSize: item.selectedSize,
-      designImage: item.designImage,
-    }));
-    
+    const { sessionId } = req.params;
+    const cart = await getSessionCart(sessionId);
+
     res.status(200).json({
       success: true,
       cart: {
-        ...cart.toObject(),
-        items: transformedItems,
+        sessionId: cart.sessionId,
+        items: cart.items,
+        subtotal: cart.subtotal,
+        discountAmount: cart.discountAmount,
+        total: cart.total,
+        couponCode: cart.couponCode,
+        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
       },
-      items: transformedItems,
     });
   } catch (error) {
     console.error('Get cart error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Add item to cart
+// Add to cart
 exports.addToCart = async (req, res) => {
   try {
-    const { 
-      productId, name, price, quantity = 1, 
+    const { sessionId } = req.params;
+    const {
+      productId, name, price, quantity = 1,
       image, category, description, serviceItems,
-      selectedColor, selectedSize, designImage 
+      selectedColor, selectedSize, designImage
     } = req.body;
-    
-    console.log('Adding to cart:', { productId, name, price, quantity, userId: req.user.id });
-    
-    // Validate required fields
-    if (!productId && !name) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Product ID or name is required' 
-      });
-    }
-    
-    let cart = await Cart.findOne({ user: req.user.id });
-    
+
+    let cart = await Cart.findOne({ sessionId });
     if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [] });
+      cart = await Cart.create({ sessionId, items: [] });
     }
-    
-    // Check if product already exists in cart with same options
+
+    // Check if item exists
     const existingItemIndex = cart.items.findIndex(
-      item => item.productId?.toString() === productId && 
-              item.selectedColor === selectedColor && 
-              item.selectedSize === selectedSize
+      item => item.productId === productId &&
+        item.selectedColor === selectedColor &&
+        item.selectedSize === selectedSize
     );
-    
+
     if (existingItemIndex > -1) {
-      // Update quantity
       cart.items[existingItemIndex].quantity += quantity;
     } else {
-      // Add new item
-     const isValidObjectId = mongoose.Types.ObjectId.isValid(productId);
-
-cart.items.push({
-  productId: isValidObjectId ? productId : null,
-  productSlug: isValidObjectId ? null : productId,
-
-  name,
-  price: parseFloat(price),
-  quantity: parseInt(quantity),
-  image: image || null,
-  category: category || 'general',
-  description: description || '',
-  serviceItems: serviceItems || [],
-  selectedColor: selectedColor || null,
-  selectedSize: selectedSize || null,
-  designImage: designImage || null,
-});
+      cart.items.push({
+        productId: productId || null,
+        name,
+        price: parseFloat(price),
+        quantity: parseInt(quantity),
+        image: image || null,
+        category: category || 'general',
+        description: description || '',
+        serviceItems: serviceItems || [],
+        selectedColor: selectedColor || null,
+        selectedSize: selectedSize || null,
+        designImage: designImage || null,
+      });
     }
-    
+
     await cart.save();
-    
-    // Populate product details if productId exists
-    if (productId) {
-      await cart.populate('items.productId', 'name price images inStock');
-    }
-    
-    // Transform items for response
-    const transformedItems = cart.items.map(item => ({
-      id: item._id.toString(),
-      productId: item.productId?._id || item.productId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      category: item.category,
-      description: item.description,
-      serviceItems: item.serviceItems,
-      selectedColor: item.selectedColor,
-      selectedSize: item.selectedSize,
-      designImage: item.designImage,
-    }));
-    
+
     res.status(200).json({
       success: true,
-      message: 'Item added to cart successfully',
+      message: 'Item added to cart',
       cart: {
-        ...cart.toObject(),
-        items: transformedItems,
+        sessionId: cart.sessionId,
+        items: cart.items,
+        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
       },
-      items: transformedItems,
     });
   } catch (error) {
     console.error('Add to cart error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Update cart item quantity
+// Update cart item
 exports.updateCartItem = async (req, res) => {
   try {
-    const { itemId } = req.params;
+    const { sessionId, itemId } = req.params;
     const { quantity } = req.body;
-    
-    if (!itemId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Item ID is required' 
-      });
-    }
-    
-    const cart = await Cart.findOne({ user: req.user.id });
-    
+
+    const cart = await Cart.findOne({ sessionId });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
-      });
+      return res.status(404).json({ success: false, message: 'Cart not found' });
     }
-    
+
     const itemIndex = cart.items.findIndex(item => item._id.toString() === itemId);
-    
     if (itemIndex === -1) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Item not found in cart' 
-      });
+      return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    
+
     if (quantity <= 0) {
-      // Remove item if quantity is 0 or negative
       cart.items.splice(itemIndex, 1);
     } else {
       cart.items[itemIndex].quantity = parseInt(quantity);
     }
-    
+
     await cart.save();
-    
-    if (cart.items.length > 0) {
-      await cart.populate('items.productId', 'name price images inStock');
-    }
-    
-    const transformedItems = cart.items.map(item => ({
-      id: item._id.toString(),
-      productId: item.productId?._id || item.productId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      category: item.category,
-      description: item.description,
-      serviceItems: item.serviceItems,
-      selectedColor: item.selectedColor,
-      selectedSize: item.selectedSize,
-      designImage: item.designImage,
-    }));
-    
+
     res.status(200).json({
       success: true,
       cart: {
-        ...cart.toObject(),
-        items: transformedItems,
+        sessionId: cart.sessionId,
+        items: cart.items,
+        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
       },
-      items: transformedItems,
     });
   } catch (error) {
-    console.error('Update cart item error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    console.error('Update cart error:', error);
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Remove item from cart
+// Remove from cart
 exports.removeFromCart = async (req, res) => {
   try {
-    const { itemId } = req.params;
-    
-    if (!itemId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Item ID is required' 
-      });
-    }
-    
-    const cart = await Cart.findOne({ user: req.user.id });
-    
+    const { sessionId, itemId } = req.params;
+
+    const cart = await Cart.findOne({ sessionId });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
-      });
+      return res.status(404).json({ success: false, message: 'Cart not found' });
     }
-    
+
     cart.items = cart.items.filter(item => item._id.toString() !== itemId);
     await cart.save();
-    
-    if (cart.items.length > 0) {
-      await cart.populate('items.productId', 'name price images inStock');
-    }
-    
-    const transformedItems = cart.items.map(item => ({
-      id: item._id.toString(),
-      productId: item.productId?._id || item.productId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      category: item.category,
-      description: item.description,
-      serviceItems: item.serviceItems,
-      selectedColor: item.selectedColor,
-      selectedSize: item.selectedSize,
-      designImage: item.designImage,
-    }));
-    
+
     res.status(200).json({
       success: true,
-      message: 'Item removed from cart',
+      message: 'Item removed',
       cart: {
-        ...cart.toObject(),
-        items: transformedItems,
+        sessionId: cart.sessionId,
+        items: cart.items,
+        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
       },
-      items: transformedItems,
     });
   } catch (error) {
     console.error('Remove from cart error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Clear entire cart
+// Clear cart
 exports.clearCart = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id });
-    
-    if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
-      });
+    const { sessionId } = req.params;
+
+    const cart = await Cart.findOne({ sessionId });
+    if (cart) {
+      cart.items = [];
+      cart.couponCode = null;
+      cart.discountAmount = 0;
+      await cart.save();
     }
-    
-    cart.items = [];
-    cart.couponCode = null;
-    cart.discountAmount = 0;
-    await cart.save();
-    
+
     res.status(200).json({
       success: true,
-      message: 'Cart cleared successfully',
-      cart: { items: [] },
-      items: [],
+      message: 'Cart cleared',
+      cart: { items: [], itemCount: 0 },
     });
   } catch (error) {
     console.error('Clear cart error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Get cart count (for header badge)
-exports.getCartCount = async (req, res) => {
-  try {
-    const cart = await Cart.findOne({ user: req.user.id });
-    const count = cart?.items.reduce((sum, item) => sum + item.quantity, 0) || 0;
-    
-    res.status(200).json({
-      success: true,
-      count,
-    });
-  } catch (error) {
-    console.error('Get cart count error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
-  }
-};
-
-// Apply coupon to cart
+// Apply coupon (simplified)
 exports.applyCoupon = async (req, res) => {
   try {
+    const { sessionId } = req.params;
     const { code } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Coupon code is required' 
-      });
-    }
-    
-    const cart = await Cart.findOne({ user: req.user.id });
-    
+
+    const cart = await Cart.findOne({ sessionId });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
-      });
+      return res.status(404).json({ success: false, message: 'Cart not found' });
     }
-    
-    // Calculate subtotal
-    const subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
-    // Find coupon
-    const coupon = await Coupon.findOne({ 
-      code: code.toUpperCase(),
-      isActive: true,
-      validFrom: { $lte: new Date() },
-      validTo: { $gte: new Date() },
-    });
-    
+
+    // Simple coupon check (you can expand this)
+    const validCoupons = {
+      'WELCOME10': { type: 'percentage', value: 10, minPurchase: 50, maxDiscount: 50 },
+      'LAUNDRICA20': { type: 'percentage', value: 20, minPurchase: 100, maxDiscount: 100 },
+      'FREE15': { type: 'fixed', value: 15, minPurchase: 75 },
+    };
+
+    const coupon = validCoupons[code.toUpperCase()];
+
     if (!coupon) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid or expired coupon code' 
+      return res.status(400).json({ success: false, message: 'Invalid coupon code' });
+    }
+
+    if (cart.subtotal < coupon.minPurchase) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum purchase of AED ${coupon.minPurchase} required`
       });
     }
-    
-    // Check minimum purchase requirement
-    if (subtotal < coupon.minPurchase) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Minimum purchase of AED ${coupon.minPurchase} required for this coupon` 
-      });
-    }
-    
-    // Check usage limit
-    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Coupon usage limit has been reached' 
-      });
-    }
-    
-    // Calculate discount
+
     let discountAmount = 0;
-    if (coupon.discountType === 'percentage') {
-      discountAmount = (subtotal * coupon.discountValue) / 100;
+    if (coupon.type === 'percentage') {
+      discountAmount = (cart.subtotal * coupon.value) / 100;
       if (coupon.maxDiscount && discountAmount > coupon.maxDiscount) {
         discountAmount = coupon.maxDiscount;
       }
     } else {
-      discountAmount = coupon.discountValue;
+      discountAmount = coupon.value;
     }
-    
-    cart.couponCode = coupon.code;
+
+    cart.couponCode = code.toUpperCase();
     cart.discountAmount = discountAmount;
     await cart.save();
-    
+
     res.status(200).json({
       success: true,
-      message: 'Coupon applied successfully',
-      cart: {
-        ...cart.toObject(),
-        subtotal,
-        total: subtotal - discountAmount,
-      },
+      message: 'Coupon applied',
       discountAmount,
-      total: subtotal - discountAmount,
+      total: cart.subtotal - discountAmount,
     });
   } catch (error) {
     console.error('Apply coupon error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Remove coupon from cart
+// Remove coupon
 exports.removeCoupon = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id });
-    
-    if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
-      });
+    const { sessionId } = req.params;
+
+    const cart = await Cart.findOne({ sessionId });
+    if (cart) {
+      cart.couponCode = null;
+      cart.discountAmount = 0;
+      await cart.save();
     }
-    
-    const subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
-    cart.couponCode = null;
-    cart.discountAmount = 0;
-    await cart.save();
-    
+
     res.status(200).json({
       success: true,
-      message: 'Coupon removed successfully',
-      cart: {
-        ...cart.toObject(),
-        subtotal,
-        total: subtotal,
-      },
+      message: 'Coupon removed',
     });
   } catch (error) {
     console.error('Remove coupon error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
-  }
-};
-
-// Merge guest cart with user cart (after login)
-exports.mergeCart = async (req, res) => {
-  try {
-    const { items } = req.body;
-    
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Items array is required' 
-      });
-    }
-    
-    let userCart = await Cart.findOne({ user: req.user.id });
-    
-    if (!userCart) {
-      userCart = await Cart.create({ user: req.user.id, items: [] });
-    }
-    
-    // Merge guest items with user cart
-    for (const guestItem of items) {
-      const existingItemIndex = userCart.items.findIndex(
-        item => item.productId?.toString() === guestItem.productId &&
-                item.selectedColor === guestItem.selectedColor &&
-                item.selectedSize === guestItem.selectedSize
-      );
-      
-      if (existingItemIndex > -1) {
-        userCart.items[existingItemIndex].quantity += guestItem.quantity;
-      } else {
-        userCart.items.push({
-          productId: guestItem.productId || null,
-          name: guestItem.name,
-          price: guestItem.price,
-          quantity: guestItem.quantity,
-          image: guestItem.image || null,
-          category: guestItem.category || 'general',
-          description: guestItem.description || '',
-          serviceItems: guestItem.serviceItems || [],
-          selectedColor: guestItem.selectedColor || null,
-          selectedSize: guestItem.selectedSize || null,
-          designImage: guestItem.designImage || null,
-        });
-      }
-    }
-    
-    await userCart.save();
-    
-    if (userCart.items.length > 0) {
-      await userCart.populate('items.productId', 'name price images inStock');
-    }
-    
-    const transformedItems = userCart.items.map(item => ({
-      id: item._id.toString(),
-      productId: item.productId?._id || item.productId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      category: item.category,
-      description: item.description,
-      serviceItems: item.serviceItems,
-      selectedColor: item.selectedColor,
-      selectedSize: item.selectedSize,
-      designImage: item.designImage,
-    }));
-    
-    res.status(200).json({
-      success: true,
-      message: 'Cart merged successfully',
-      cart: {
-        ...userCart.toObject(),
-        items: transformedItems,
-      },
-      items: transformedItems,
-    });
-  } catch (error) {
-    console.error('Merge cart error:', error);
-    res.status(400).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 };
