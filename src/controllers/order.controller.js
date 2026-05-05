@@ -28,7 +28,17 @@ exports.createOrder = async (req, res) => {
     if (!orderItems || orderItems.length === 0) {
       const cart = await Cart.findOne({ sessionId });
       if (cart && cart.items.length > 0) {
-        orderItems = cart.items;
+        orderItems = cart.items.map(item => ({
+          productId: item.productId || null,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image,
+          serviceItems: item.serviceItems || [],
+          selectedColor: item.selectedColor,
+          selectedSize: item.selectedSize,
+          designImage: item.designImage,
+        }));
         subtotal = cart.subtotal;
       } else {
         return res.status(400).json({ success: false, message: 'Cart is empty' });
@@ -91,7 +101,6 @@ exports.createOrder = async (req, res) => {
       }
     } catch (zohoError) {
       console.error(`❌ Zoho sync error for ${order.orderNumber}:`, zohoError.message);
-      // Don't fail the order if Zoho sync fails
     }
 
     // ========== SEND VIA WHATSAPP ==========
@@ -108,8 +117,27 @@ exports.createOrder = async (req, res) => {
       whatsappResult = { success: false, link: whatsappService.generateWhatsAppLink(order) };
     }
 
-    // Clear the cart after order
-    await Cart.findOneAndDelete({ sessionId });
+    // ========== CRITICAL FIX: CLEAR THE CART COMPLETELY ==========
+    try {
+      // Method 1: Clear all items from cart
+      const cart = await Cart.findOne({ sessionId });
+      if (cart) {
+        cart.items = [];
+        cart.couponCode = null;
+        cart.discountAmount = 0;
+        cart.subtotal = 0;
+        cart.total = 0;
+        await cart.save();
+        console.log(`✅ Cart cleared for session: ${sessionId}`);
+      }
+
+      // Method 2: Alternatively, delete the cart completely (uncomment if you prefer)
+      // await Cart.findOneAndDelete({ sessionId });
+      // console.log(`✅ Cart deleted for session: ${sessionId}`);
+    } catch (cartError) {
+      console.error(`⚠️ Error clearing cart:`, cartError.message);
+      // Don't fail the order if cart clearing fails
+    }
 
     // Prepare response
     const response = {
@@ -122,13 +150,13 @@ exports.createOrder = async (req, res) => {
         zohoSynced: order.zohoSynced,
         whatsappSent: order.whatsappSent,
       },
-      message: 'Order created successfully!',
+      message: 'Order created successfully! Cart has been cleared.',
     };
 
     // Add WhatsApp link if not sent automatically
     if (!whatsappResult.success && whatsappResult.link) {
       response.whatsappLink = whatsappResult.link;
-      response.message = 'Order created! Click the link to confirm via WhatsApp.';
+      response.message = 'Order created! Cart cleared. Click the link to confirm via WhatsApp.';
     }
 
     // Add Zoho info if synced
@@ -147,7 +175,7 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// Update order status (also updates Zoho)
+// Update order status
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderNumber } = req.params;
@@ -165,7 +193,6 @@ exports.updateOrderStatus = async (req, res) => {
     }
     await order.save();
 
-    // Update status in Zoho CRM if deal ID exists
     if (order.zohoDealId) {
       await zohoService.updateDealStatus(orderNumber, status, order.zohoDealId);
     }
@@ -240,7 +267,7 @@ exports.getOrdersBySession = async (req, res) => {
   }
 };
 
-// Resync order to Zoho (admin utility)
+// Resync order to Zoho
 exports.resyncToZoho = async (req, res) => {
   try {
     const { orderNumber } = req.params;

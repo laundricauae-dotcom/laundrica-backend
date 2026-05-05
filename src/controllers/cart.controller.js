@@ -3,6 +3,9 @@ const { v4: uuidv4 } = require('uuid');
 
 // Helper to get or validate session
 const getSessionCart = async (sessionId) => {
+  if (!sessionId) {
+    throw new Error('Session ID is required');
+  }
   let cart = await Cart.findOne({ sessionId });
   if (!cart) {
     cart = await Cart.create({ sessionId, items: [] });
@@ -14,6 +17,11 @@ const getSessionCart = async (sessionId) => {
 exports.getCart = async (req, res) => {
   try {
     const { sessionId } = req.params;
+
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID is required' });
+    }
+
     const cart = await getSessionCart(sessionId);
 
     res.status(200).json({
@@ -44,23 +52,34 @@ exports.addToCart = async (req, res) => {
       selectedColor, selectedSize, designImage
     } = req.body;
 
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID is required' });
+    }
+
+    if (!name || !price) {
+      return res.status(400).json({ success: false, message: 'Product name and price are required' });
+    }
+
     let cart = await Cart.findOne({ sessionId });
     if (!cart) {
       cart = await Cart.create({ sessionId, items: [] });
     }
 
-    // Check if item exists
+    // Generate a unique item ID if not provided
+    const itemId = productId || `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Check if item exists with same productId, color, and size
     const existingItemIndex = cart.items.findIndex(
-      item => item.productId === productId &&
+      item => item.productId === itemId &&
         item.selectedColor === selectedColor &&
         item.selectedSize === selectedSize
     );
 
     if (existingItemIndex > -1) {
-      cart.items[existingItemIndex].quantity += quantity;
+      cart.items[existingItemIndex].quantity += parseInt(quantity);
     } else {
       cart.items.push({
-        productId: productId || null,
+        productId: itemId,
         name,
         price: parseFloat(price),
         quantity: parseInt(quantity),
@@ -76,13 +95,18 @@ exports.addToCart = async (req, res) => {
 
     await cart.save();
 
+    // Return updated cart
+    const updatedCart = await Cart.findOne({ sessionId });
+
     res.status(200).json({
       success: true,
       message: 'Item added to cart',
       cart: {
-        sessionId: cart.sessionId,
-        items: cart.items,
-        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+        sessionId: updatedCart.sessionId,
+        items: updatedCart.items,
+        itemCount: updatedCart.items.reduce((sum, item) => sum + item.quantity, 0),
+        subtotal: updatedCart.subtotal,
+        total: updatedCart.total,
       },
     });
   } catch (error) {
@@ -96,6 +120,10 @@ exports.updateCartItem = async (req, res) => {
   try {
     const { sessionId, itemId } = req.params;
     const { quantity } = req.body;
+
+    if (!sessionId || !itemId) {
+      return res.status(400).json({ success: false, message: 'Session ID and Item ID are required' });
+    }
 
     const cart = await Cart.findOne({ sessionId });
     if (!cart) {
@@ -115,12 +143,17 @@ exports.updateCartItem = async (req, res) => {
 
     await cart.save();
 
+    const updatedCart = await Cart.findOne({ sessionId });
+
     res.status(200).json({
       success: true,
+      message: quantity <= 0 ? 'Item removed' : 'Cart updated',
       cart: {
-        sessionId: cart.sessionId,
-        items: cart.items,
-        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+        sessionId: updatedCart.sessionId,
+        items: updatedCart.items,
+        itemCount: updatedCart.items.reduce((sum, item) => sum + item.quantity, 0),
+        subtotal: updatedCart.subtotal,
+        total: updatedCart.total,
       },
     });
   } catch (error) {
@@ -134,21 +167,35 @@ exports.removeFromCart = async (req, res) => {
   try {
     const { sessionId, itemId } = req.params;
 
+    if (!sessionId || !itemId) {
+      return res.status(400).json({ success: false, message: 'Session ID and Item ID are required' });
+    }
+
     const cart = await Cart.findOne({ sessionId });
     if (!cart) {
       return res.status(404).json({ success: false, message: 'Cart not found' });
     }
 
+    const originalLength = cart.items.length;
     cart.items = cart.items.filter(item => item._id.toString() !== itemId);
+
+    if (cart.items.length === originalLength) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
+
     await cart.save();
+
+    const updatedCart = await Cart.findOne({ sessionId });
 
     res.status(200).json({
       success: true,
-      message: 'Item removed',
+      message: 'Item removed from cart',
       cart: {
-        sessionId: cart.sessionId,
-        items: cart.items,
-        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+        sessionId: updatedCart.sessionId,
+        items: updatedCart.items,
+        itemCount: updatedCart.items.reduce((sum, item) => sum + item.quantity, 0),
+        subtotal: updatedCart.subtotal,
+        total: updatedCart.total,
       },
     });
   } catch (error) {
@@ -157,23 +204,30 @@ exports.removeFromCart = async (req, res) => {
   }
 };
 
-// Clear cart
+// Clear cart - COMPLETELY DELETE ALL ITEMS
 exports.clearCart = async (req, res) => {
   try {
     const { sessionId } = req.params;
 
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID is required' });
+    }
+
     const cart = await Cart.findOne({ sessionId });
     if (cart) {
+      // Clear all items and reset coupon
       cart.items = [];
       cart.couponCode = null;
       cart.discountAmount = 0;
+      cart.subtotal = 0;
+      cart.total = 0;
       await cart.save();
     }
 
     res.status(200).json({
       success: true,
-      message: 'Cart cleared',
-      cart: { items: [], itemCount: 0 },
+      message: 'Cart cleared successfully',
+      cart: { items: [], itemCount: 0, subtotal: 0, total: 0 },
     });
   } catch (error) {
     console.error('Clear cart error:', error);
@@ -181,7 +235,28 @@ exports.clearCart = async (req, res) => {
   }
 };
 
-// Apply coupon (simplified)
+// Delete cart completely (for cleanup after order)
+exports.deleteCart = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID is required' });
+    }
+
+    const result = await Cart.findOneAndDelete({ sessionId });
+
+    res.status(200).json({
+      success: true,
+      message: result ? 'Cart deleted successfully' : 'Cart not found',
+    });
+  } catch (error) {
+    console.error('Delete cart error:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Apply coupon
 exports.applyCoupon = async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -192,7 +267,6 @@ exports.applyCoupon = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cart not found' });
     }
 
-    // Simple coupon check (you can expand this)
     const validCoupons = {
       'WELCOME10': { type: 'percentage', value: 10, minPurchase: 50, maxDiscount: 50 },
       'LAUNDRICA20': { type: 'percentage', value: 20, minPurchase: 100, maxDiscount: 100 },
