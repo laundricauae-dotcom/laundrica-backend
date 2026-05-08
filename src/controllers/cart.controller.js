@@ -1,3 +1,4 @@
+
 const Cart = require('../models/Cart');
 const { v4: uuidv4 } = require('uuid');
 
@@ -6,11 +7,21 @@ const getSessionCart = async (sessionId) => {
   if (!sessionId) {
     throw new Error('Session ID is required');
   }
-  let cart = await Cart.findOne({ sessionId });
-  if (!cart) {
-    cart = await Cart.create({ sessionId, items: [] });
+
+  try {
+    let cart = await Cart.findOne({ sessionId });
+    if (!cart) {
+      cart = await Cart.create({ sessionId, items: [] });
+    }
+    return cart;
+  } catch (error) {
+    // Handle duplicate key error by fetching existing cart
+    if (error.code === 11000) {
+      const existingCart = await Cart.findOne({ sessionId });
+      if (existingCart) return existingCart;
+    }
+    throw error;
   }
-  return cart;
 };
 
 // Get cart

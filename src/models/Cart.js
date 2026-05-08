@@ -18,6 +18,7 @@ const cartItemSchema = new mongoose.Schema({
   selectedColor: { type: String, default: null },
   selectedSize: { type: String, default: null },
   designImage: { type: String, default: null },
+  metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
 });
 
 const cartSchema = new mongoose.Schema(
@@ -26,6 +27,7 @@ const cartSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true,
     },
     items: [cartItemSchema],
     couponCode: { type: String, default: null },
@@ -43,11 +45,13 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-cartSchema.pre('save', function () {
+// Pre-save middleware to calculate totals
+cartSchema.pre('save', function (next) {
   this.subtotal = this.items.reduce(
     (sum, item) => sum + (item.price * item.quantity), 0
   );
   this.total = Math.max(0, this.subtotal - (this.discountAmount || 0));
+  next();
 });
 
 module.exports = mongoose.model('Cart', cartSchema);
