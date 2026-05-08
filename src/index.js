@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const compression = require('compression'); // Add this import
 
 // Load env
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -14,7 +15,7 @@ const {
   corsMiddleware,
   securityHeaders,
   sanitize,
-  compress,
+  // compress, // Remove from here - we'll configure manually
   cacheMiddleware,
 } = require('./middleware');
 
@@ -23,7 +24,20 @@ const app = express();
 // ========== GLOBAL MIDDLEWARES ==========
 app.use(corsMiddleware);           // CORS first
 app.use(securityHeaders);          // Security headers
-app.use(compress);                 // Response compression
+
+// Configure compression properly
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  // Don't compress API routes
+  filter: (req, res) => {
+    if (req.path && req.path.startsWith('/api/')) {
+      return false; // Skip compression for API routes
+    }
+    return true; // Compress everything else
+  }
+}));
+
 app.use(logger);                   // Request logging
 app.use(sanitize);                 // Input sanitization
 app.use(express.json({ limit: '10mb' }));  // JSON parsing
