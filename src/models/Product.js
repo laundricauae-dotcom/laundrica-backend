@@ -18,7 +18,19 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ['laundry', 'dry-cleaning', 'shoe-cleaning', 'carpet-cleaning', 'curtain-cleaning', 'commercial', 'apparel', 'uniform', 'accessories'],
+      enum: [
+        'laundry',
+        'dry-cleaning',
+        'wash-and-fold',
+        'steam-ironing',
+        'shoe-cleaning',
+        'carpet-cleaning',
+        'curtain-cleaning',
+        'commercial',
+        'apparel',
+        'uniform',
+        'accessories'
+      ],
     },
     subCategory: String,
     images: [productImageSchema],
