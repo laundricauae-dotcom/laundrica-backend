@@ -13,8 +13,8 @@ const Cart = require('./models/Cart');
 
 const products = [
   {
-    name: 'Laundry',
-    slug: 'laundry-services-in-dubai',
+    name: 'Wash & Press',
+    slug: 'wash-and-press-services-in-dubai',
     description:
       'Professional laundry cleaning with premium detergents and expert garment care.',
     price: 0,
@@ -53,13 +53,13 @@ const products = [
       'https://lh3.googleusercontent.com/aida-public/AB6AXuDP4Fl1mcL71ms-0aDco1bos4KJFJEZx5OQnJIOBWlWluJMOTU3XhoRrxAQvDa2yackx6UDbMN2aeY0HX3vJrKxXZZvOxDngQlZRCw6IC4qNlNInPtj13VA8r8kN-3-D0Jxrt44nDI5JAqB96hap1m-Sa8t_3oq6LroL8Ag9vqpd38eVyGtjT49EfXZUUUEmpo9H8CJRr1964I_IjjhCECEuvi3KYyJIWnmLx6Um420B0z6GG4nyB3DmF5ORn7DB6p1qP9FsFWioqH3',
     isActive: true,
     isFeatured: true,
-    turnaround: '24 hours',
+    turnaround: '24-48hours',
     sortOrder: 3,
   },
 
   {
     name: 'Steam Ironing',
-    slug: 'steam-ironing-services-in-dubai',
+    slug: 'steam-press-services-in-dubai',
     description:
       'Professional steam ironing for wrinkle-free crisp finishing.',
     price: 0,
@@ -68,13 +68,13 @@ const products = [
       'https://static.vecteezy.com/system/resources/thumbnails/075/548/139/small/closeup-electric-steam-iron-pressing-blue-shirt-with-powerful-vapor-mist-photo.jpeg',
     isActive: true,
     isFeatured: true,
-    turnaround: '24 hours',
+    turnaround: '24-48 hours',
     sortOrder: 4,
   },
 
   {
-    name: 'Shoe Cleaning',
-    slug: 'shoe-cleaning-services-in-dubai',
+    name: 'Shoe Care',
+    slug: 'shoe-care-services-in-dubai',
     description:
       'Deep cleaning and restoration for sneakers, leather shoes, and luxury footwear.',
     price: 0,
@@ -83,13 +83,13 @@ const products = [
       'https://lh3.googleusercontent.com/aida-public/AB6AXuAyptsqgZUbgwL6Bq4bEsstny-6nDqBiqN5cBGYnfUgzSDXYcQRlm_pDhIj6-7C68tcWLpUVUoyuqYl-KtPTYiEtKvAJKV-rN_GAYoaYWEJWdkhtUtLShsLIqrzAO6qwGzS6zO7N7uSjdF1P9-5EztAjqUgYK-p6ctAHvjW1HY9dOh0XDdiAVOm2igRfKnzzKg7pled4rUzMo9aRGOi5PSI77IxhAP5ks-Hikp_CL0RfODVncfmgpsv7pnnGfj_ibEbUbaBjB1zew3f',
     isActive: true,
     isFeatured: true,
-    turnaround: '24-48 hours',
+    turnaround: 'Depending on shoe type',
     sortOrder: 5,
   },
 
   {
     name: 'Carpet Cleaning',
-    slug: 'carpet-cleaning-services-in-dubai',
+    slug: 'carpet-care-services-in-dubai',
     description:
       'Deep carpet shampooing and stain removal with industrial cleaning.',
     price: 0,
@@ -98,7 +98,7 @@ const products = [
       'https://lh3.googleusercontent.com/aida-public/AB6AXuA45R7mYBYS5a_-9pcT1PdHvi75OrnW6SgurkHhCX-fJ_ymGD8x0ZZuqiCo5Rh908iElZhzYe3KP3UjAx1wUQ4w_Gkwp_0eqEpz_6SyRfDVW2dl0ja2MyCknffKUydongro0YT2wxCiDPDXKNyOovJkMUoqOJr4ZA-NfMZLhrLsPSzz1PycN1W0-fHxB0FkSehzYFH-4oAoWgJiJMcL_xJ9Sn_AkpjsLYsdhmJFybGq8Ju4kHUF-wp0f_OGW_HJf2FKgFPDwm8vZA6D',
     isActive: true,
     isFeatured: true,
-    turnaround: '48-72 hours',
+    turnaround: 'depending on carpet size and condition',
     sortOrder: 6,
   },
 ];

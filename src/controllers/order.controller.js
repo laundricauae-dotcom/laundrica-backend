@@ -104,17 +104,30 @@ exports.createOrder = async (req, res) => {
     }
 
     // ========== SEND VIA WHATSAPP ==========
+    // ========== SEND VIA INTERAKT WHATSAPP ==========
     let whatsappResult;
     try {
-      whatsappResult = await whatsappService.sendOrderViaWhatsApp(order, customerInfo.phone);
-      if (whatsappResult.success) {
+      const sendResult = await interaktWhatsapp.sendOrderConfirmation(order, customerInfo.phone);
+      if (sendResult.success) {
         order.whatsappSent = true;
         order.whatsappSentAt = new Date();
+        order.whatsappMessageId = sendResult.messageId;
         await order.save();
+        whatsappResult = { success: true };
+        console.log(`✅ WhatsApp confirmation sent for order ${order.orderNumber}`);
+      } else {
+        console.warn(`⚠️ Interakt API failed: ${sendResult.error}. Using fallback link.`);
+        whatsappResult = {
+          success: false,
+          link: interaktWhatsapp.generateWhatsAppLink(order)
+        };
       }
     } catch (whatsappError) {
       console.error(`❌ WhatsApp send error:`, whatsappError.message);
-      whatsappResult = { success: false, link: whatsappService.generateWhatsAppLink(order) };
+      whatsappResult = {
+        success: false,
+        link: interaktWhatsapp.generateWhatsAppLink(order)
+      };
     }
 
     // ========== CRITICAL FIX: CLEAR THE CART COMPLETELY ==========
