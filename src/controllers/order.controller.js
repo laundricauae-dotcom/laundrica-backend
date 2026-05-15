@@ -38,6 +38,8 @@ exports.createOrder = async (req, res) => {
           selectedColor: item.selectedColor,
           selectedSize: item.selectedSize,
           designImage: item.designImage,
+          serviceName: item.metadata?.serviceName || '',
+          category: item.category || '',
         }));
         subtotal = cart.subtotal;
       } else {
@@ -47,9 +49,9 @@ exports.createOrder = async (req, res) => {
       subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     }
 
-    // Calculate fees
-    const deliveryFee = subtotal > 100 ? 0 : 15;
-    const tax = subtotal * 0.05;
+    // Calculate fees - NO DELIVERY FEE and NO TAX
+    const deliveryFee = 0; // Changed to 0
+    const tax = 0; // Changed to 0
     const discount = 0;
     const total = subtotal + deliveryFee + tax - discount;
 
@@ -66,6 +68,8 @@ exports.createOrder = async (req, res) => {
         selectedColor: item.selectedColor,
         selectedSize: item.selectedSize,
         designImage: item.designImage,
+        serviceName: item.serviceName || item.metadata?.serviceName || '',
+        category: item.category || '',
       })),
       subtotal,
       deliveryFee,
@@ -86,6 +90,7 @@ exports.createOrder = async (req, res) => {
     });
 
     console.log(`✅ Order created: ${order.orderNumber}`);
+    console.log(`📊 Order total: AED ${total} (Subtotal: AED ${subtotal})`);
 
     // ========== SYNC TO ZOHO CRM ==========
     let zohoSyncResult = null;
@@ -131,7 +136,7 @@ exports.createOrder = async (req, res) => {
 
     // ========== CRITICAL FIX: CLEAR THE CART COMPLETELY ==========
     try {
-      // Method 1: Clear all items from cart
+      // Clear all items from cart
       const cart = await Cart.findOne({ sessionId });
       if (cart) {
         cart.items = [];
@@ -144,6 +149,7 @@ exports.createOrder = async (req, res) => {
       }
     } catch (cartError) {
       console.error(`⚠️ Error clearing cart:`, cartError.message);
+      // Don't fail the order if cart clearing fails
     }
 
     // Prepare response
@@ -241,6 +247,8 @@ exports.trackOrder = async (req, res) => {
           name: item.name,
           quantity: item.quantity,
           price: item.price,
+          serviceName: item.serviceName,
+          category: item.category,
         })),
         zohoSynced: order.zohoSynced,
       },
@@ -299,6 +307,79 @@ exports.resyncToZoho = async (req, res) => {
       zoho: result,
     });
   } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Get order by ID
+exports.getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      order: {
+        id: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        total: order.total,
+        subtotal: order.subtotal,
+        createdAt: order.createdAt,
+        customerInfo: order.customerInfo,
+        items: order.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          serviceName: item.serviceName,
+          category: item.category,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Get order by ID error:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// Cancel order
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sessionId } = req.body;
+
+    const order = await Order.findOne({ _id: id, sessionId });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'Order is already cancelled' });
+    }
+
+    if (order.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel a completed order' });
+    }
+
+    order.status = 'cancelled';
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Order cancelled successfully',
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+      },
+    });
+  } catch (error) {
+    console.error('Cancel order error:', error);
     res.status(400).json({ success: false, message: error.message });
   }
 };

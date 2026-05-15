@@ -15,6 +15,8 @@ const orderItemSchema = new mongoose.Schema({
   selectedColor: String,
   selectedSize: String,
   designImage: String,
+  serviceName: { type: String, default: '' }, // Added to track which service items came from
+  category: { type: String, default: '' }, // Added to track category
 });
 
 const orderSchema = new mongoose.Schema(
@@ -23,8 +25,8 @@ const orderSchema = new mongoose.Schema(
     sessionId: { type: String, required: true },
     items: [orderItemSchema],
     subtotal: { type: Number, required: true, default: 0 },
-    deliveryFee: { type: Number, default: 15 },
-    tax: { type: Number, default: 0 },
+    deliveryFee: { type: Number, default: 0 }, // Changed to 0
+    tax: { type: Number, default: 0 }, // Changed to 0
     discount: { type: Number, default: 0 },
     total: { type: Number, required: true },
     status: {
