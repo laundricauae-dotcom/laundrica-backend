@@ -104,7 +104,6 @@ exports.createOrder = async (req, res) => {
     }
 
     // ========== SEND VIA WHATSAPP ==========
-    // ========== SEND VIA INTERAKT WHATSAPP ==========
     let whatsappResult;
     try {
       const sendResult = await interaktWhatsapp.sendOrderConfirmation(order, customerInfo.phone);
@@ -143,13 +142,8 @@ exports.createOrder = async (req, res) => {
         await cart.save();
         console.log(`✅ Cart cleared for session: ${sessionId}`);
       }
-
-      // Method 2: Alternatively, delete the cart completely (uncomment if you prefer)
-      // await Cart.findOneAndDelete({ sessionId });
-      // console.log(`✅ Cart deleted for session: ${sessionId}`);
     } catch (cartError) {
       console.error(`⚠️ Error clearing cart:`, cartError.message);
-      // Don't fail the order if cart clearing fails
     }
 
     // Prepare response
