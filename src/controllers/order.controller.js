@@ -1,232 +1,214 @@
+// /src/controllers/order.controller.js
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
-const whatsappService = require('../services/whatsapp.service');
 const zohoService = require('../services/zoho.service');
+const { v4: uuidv4 } = require('uuid');
 
-// Create new order and sync with WhatsApp + Zoho CRM
+// WhatsApp service function
+const sendWhatsAppMessage = async (order, customerPhone) => {
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+    // If using Twilio
+    if (accountSid && authToken && twilioWhatsAppNumber) {
+      const client = require('twilio')(accountSid, authToken);
+
+      const itemsList = order.items.map(item =>
+        `• ${item.name} x${item.quantity} = AED ${(item.price * item.quantity).toFixed(2)}`
+      ).join('\n');
+
+      const messageBody = `🫧 *LAUNDRICA ORDER CONFIRMED* 🫧
+
+Order #: ${order.orderNumber}
+
+Customer: ${order.customerInfo.name}
+Phone: ${order.customerInfo.phone}
+
+📦 *Items:*
+${itemsList}
+
+💰 *Total: AED ${order.total.toFixed(2)}*
+
+⏰ Expected Delivery: 24-48 hours
+
+Thank you for choosing Laundrica! ✨`;
+
+      await client.messages.create({
+        body: messageBody,
+        from: `whatsapp:${twilioWhatsAppNumber}`,
+        to: `whatsapp:${customerPhone}`
+      });
+
+      console.log(`✅ WhatsApp message sent to ${customerPhone}`);
+      return true;
+    }
+
+    // If using WhatsApp Business API via interakt
+    if (process.env.INTERAKT_API_KEY) {
+      const axios = require('axios');
+      const itemsList = order.items.map(item =>
+        `• ${item.name} x${item.quantity} = AED ${(item.price * item.quantity).toFixed(2)}`
+      ).join('\n');
+
+      const response = await axios.post('https://api.interakt.ai/v1/public/message/', {
+        channel: 'whatsapp',
+        to: customerPhone,
+        type: 'text',
+        text: {
+          body: `🫧 *LAUNDRICA ORDER CONFIRMED* 🫧\n\nOrder #: ${order.orderNumber}\n\nCustomer: ${order.customerInfo.name}\n\n📦 Items:\n${itemsList}\n\n💰 Total: AED ${order.total.toFixed(2)}\n\nThank you for choosing Laundrica! ✨`
+        }
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.INTERAKT_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log(`✅ WhatsApp message sent via Interakt to ${customerPhone}`);
+      return true;
+    }
+
+    console.log('⚠️ WhatsApp service not configured, skipping message');
+    return false;
+  } catch (error) {
+    console.error('❌ WhatsApp send error:', error.message);
+    return false;
+  }
+};
+
+// Generate order number
+const generateOrderNumber = () => {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const random = Math.floor(Math.random() * 1000).toString().padStart(4, '0');
+  return `ORD-${year}${month}${day}-${random}`;
+};
+
+// Create order
 exports.createOrder = async (req, res) => {
   try {
-    console.log('📦 Creating order...');
-    const { sessionId, customerInfo, items, cartData } = req.body;
+    const {
+      sessionId,
+      items,
+      subtotal,
+      deliveryFee = 0,
+      tax = 0,
+      discount = 0,
+      total,
+      customerInfo,
+    } = req.body;
 
-    // Validation
+    console.log('📨 POST /api/orders -', new Date().toISOString());
+    console.log('📦 Creating order...');
+
+    // Validate required fields
     if (!sessionId) {
       return res.status(400).json({ success: false, message: 'Session ID is required' });
     }
 
+    if (!items || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'No items in order' });
+    }
+
     if (!customerInfo || !customerInfo.name || !customerInfo.phone || !customerInfo.address) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide name, phone, and address'
-      });
+      return res.status(400).json({ success: false, message: 'Customer information is incomplete' });
     }
 
-    // Get items from request or cart
-    let orderItems = items;
-    let subtotal = 0;
+    // Get carpet and shoes toggle preferences from localStorage (sent from frontend)
+    // The frontend sends these in the request body
+    const carpetContactEnabled = req.body.carpetContactEnabled || false;
+    const shoesContactEnabled = req.body.shoesContactEnabled || false;
 
-    if (!orderItems || orderItems.length === 0) {
-      const cart = await Cart.findOne({ sessionId });
-      if (cart && cart.items.length > 0) {
-        orderItems = cart.items.map(item => ({
-          productId: item.productId || null,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          image: item.image,
-          serviceItems: item.serviceItems || [],
-          selectedColor: item.selectedColor,
-          selectedSize: item.selectedSize,
-          designImage: item.designImage,
-          serviceName: item.metadata?.serviceName || '',
-          category: item.category || '',
-        }));
-        subtotal = cart.subtotal;
-      } else {
-        return res.status(400).json({ success: false, message: 'Cart is empty' });
-      }
-    } else {
-      subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    }
+    // Create order number
+    const orderNumber = generateOrderNumber();
 
-    // Calculate fees - NO DELIVERY FEE and NO TAX
-    const deliveryFee = 0; // Changed to 0
-    const tax = 0; // Changed to 0
-    const discount = 0;
-    const total = subtotal + deliveryFee + tax - discount;
-
-    // Create order in database
-    const order = await Order.create({
+    // Create order object
+    const orderData = {
+      orderNumber,
       sessionId,
-      items: orderItems.map(item => ({
-        productId: item.productId || null,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        image: item.image,
-        serviceItems: item.serviceItems || [],
-        selectedColor: item.selectedColor,
-        selectedSize: item.selectedSize,
-        designImage: item.designImage,
-        serviceName: item.serviceName || item.metadata?.serviceName || '',
-        category: item.category || '',
-        metadata: item.metadata || {},
-      })),
-      subtotal,
+      items,
+      subtotal: subtotal || total,
       deliveryFee,
       tax,
       discount,
-      total,
-      customerInfo: {
-        name: customerInfo.name,
-        phone: customerInfo.phone,
-        email: customerInfo.email || '',
-        address: customerInfo.address,
-        city: customerInfo.city || 'Dubai',
-        notes: customerInfo.notes || '',
-      },
+      total: total || subtotal,
       status: 'pending',
-      whatsappSent: false,
-      zohoSynced: false,
-    });
+      customerInfo: {
+        ...customerInfo,
+        crmPreferences: {
+          carpetContactEnabled,
+          shoesContactEnabled,
+        },
+      },
+    };
 
-    console.log(`✅ Order created: ${order.orderNumber}`);
-    console.log(`📊 Order total: AED ${total} (Subtotal: AED ${subtotal})`);
+    // Save to database
+    const order = new Order(orderData);
+    await order.save();
 
-    // ========== SYNC TO ZOHO CRM ==========
-    let zohoSyncResult = null;
+    console.log(`✅ Order created: ${orderNumber}`);
+    console.log(`📊 Order total: AED ${order.total} (Subtotal: AED ${order.subtotal})`);
+    console.log(`🪙 Carpet Contact Enabled: ${carpetContactEnabled ? 'YES' : 'NO'}`);
+    console.log(`👟 Shoes Contact Enabled: ${shoesContactEnabled ? 'YES' : 'NO'}`);
+
+    // Sync to Zoho CRM
     try {
-      zohoSyncResult = await zohoService.syncOrderToZoho(order);
-      if (zohoSyncResult.success) {
-        order.zohoSynced = true;
-        order.zohoDealId = zohoSyncResult.dealId;
-        await order.save();
-        console.log(`✅ Order ${order.orderNumber} synced to Zoho CRM`);
+      console.log(`🔄 Syncing order ${orderNumber} to Zoho CRM...`);
+      const syncResult = await zohoService.syncOrderToZoho(order);
+      if (syncResult.success) {
+        console.log(`✅ Order ${orderNumber} synced to Zoho CRM`);
       } else {
-        console.warn(`⚠️ Zoho sync failed for ${order.orderNumber}:`, zohoSyncResult.error);
+        console.error(`❌ Failed to sync order ${orderNumber} to Zoho:`, syncResult.error);
       }
     } catch (zohoError) {
-      console.error(`❌ Zoho sync error for ${order.orderNumber}:`, zohoError.message);
+      console.error('❌ Zoho sync error:', zohoError.message);
     }
 
-    // ========== SEND VIA WHATSAPP ==========
-    let whatsappResult;
+    // Send WhatsApp message
     try {
-      const sendResult = await interaktWhatsapp.sendOrderConfirmation(order, customerInfo.phone);
-      if (sendResult.success) {
-        order.whatsappSent = true;
-        order.whatsappSentAt = new Date();
-        order.whatsappMessageId = sendResult.messageId;
-        await order.save();
-        whatsappResult = { success: true };
-        console.log(`✅ WhatsApp confirmation sent for order ${order.orderNumber}`);
-      } else {
-        console.warn(`⚠️ Interakt API failed: ${sendResult.error}. Using fallback link.`);
-        whatsappResult = {
-          success: false,
-          link: interaktWhatsapp.generateWhatsAppLink(order)
-        };
-      }
+      const formattedPhone = customerInfo.phone.replace(/^\+/, '').replace(/\s/g, '');
+      await sendWhatsAppMessage(order, formattedPhone);
     } catch (whatsappError) {
-      console.error(`❌ WhatsApp send error:`, whatsappError.message);
-      whatsappResult = {
-        success: false,
-        link: interaktWhatsapp.generateWhatsAppLink(order)
-      };
+      console.error('❌ WhatsApp error:', whatsappError.message);
     }
 
-    // ========== CRITICAL FIX: CLEAR THE CART COMPLETELY ==========
+    // Clear the cart after successful order
     try {
-      // Clear all items from cart
-      const cart = await Cart.findOne({ sessionId });
-      if (cart) {
-        cart.items = [];
-        cart.couponCode = null;
-        cart.discountAmount = 0;
-        cart.subtotal = 0;
-        cart.total = 0;
-        await cart.save();
-        console.log(`✅ Cart cleared for session: ${sessionId}`);
-      }
+      await Cart.findOneAndDelete({ sessionId });
+      console.log(`🗑️ Cart cleared for session: ${sessionId}`);
     } catch (cartError) {
-      console.error(`⚠️ Error clearing cart:`, cartError.message);
-      // Don't fail the order if cart clearing fails
+      console.error('Failed to clear cart:', cartError.message);
     }
 
-    // Prepare response
-    const response = {
+    // Return response
+    res.status(201).json({
       success: true,
+      message: 'Order created successfully',
       order: {
+        id: order._id,
         orderNumber: order.orderNumber,
         total: order.total,
         status: order.status,
         createdAt: order.createdAt,
-        zohoSynced: order.zohoSynced,
-        whatsappSent: order.whatsappSent,
       },
-      message: 'Order created successfully! Cart has been cleared.',
-    };
-
-    // Add WhatsApp link if not sent automatically
-    if (!whatsappResult.success && whatsappResult.link) {
-      response.whatsappLink = whatsappResult.link;
-      response.message = 'Order created! Cart cleared. Click the link to confirm via WhatsApp.';
-    }
-
-    // Add Zoho info if synced
-    if (zohoSyncResult && zohoSyncResult.success) {
-      response.zoho = {
-        dealId: zohoSyncResult.dealId,
-        contactId: zohoSyncResult.contactId,
-      };
-    }
-
-    res.status(201).json(response);
+      whatsappLink: `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
+    });
 
   } catch (error) {
     console.error('❌ Create order error:', error);
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// Update order status
-exports.updateOrderStatus = async (req, res) => {
-  try {
-    const { orderNumber } = req.params;
-    const { status, notes } = req.body;
-
-    const order = await Order.findOne({ orderNumber });
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    order.status = status;
-    if (notes) {
-      order.customerInfo.notes = notes;
-    }
-    await order.save();
-
-    if (order.zohoDealId) {
-      await zohoService.updateDealStatus(orderNumber, status, order.zohoDealId);
-    }
-
-    res.status(200).json({
-      success: true,
-      order: {
-        orderNumber: order.orderNumber,
-        status: order.status,
-        updatedAt: order.updatedAt,
-      },
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create order',
     });
-  } catch (error) {
-    console.error('Update order error:', error);
-    res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// Track order
-exports.trackOrder = async (req, res) => {
+// Get order by number
+exports.getOrderByNumber = async (req, res) => {
   try {
     const { orderNumber } = req.params;
 
@@ -238,24 +220,11 @@ exports.trackOrder = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      order: {
-        orderNumber: order.orderNumber,
-        status: order.status,
-        total: order.total,
-        createdAt: order.createdAt,
-        customerInfo: order.customerInfo,
-        items: order.items.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          serviceName: item.serviceName,
-          category: item.category,
-        })),
-        zohoSynced: order.zohoSynced,
-      },
+      order,
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Get order error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -264,29 +233,23 @@ exports.getOrdersBySession = async (req, res) => {
   try {
     const { sessionId } = req.params;
 
-    const orders = await Order.find({ sessionId })
-      .sort('-createdAt')
-      .limit(10);
+    const orders = await Order.find({ sessionId }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
-      orders: orders.map(order => ({
-        orderNumber: order.orderNumber,
-        status: order.status,
-        total: order.total,
-        createdAt: order.createdAt,
-        zohoSynced: order.zohoSynced,
-      })),
+      orders,
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Get orders error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Resync order to Zoho
-exports.resyncToZoho = async (req, res) => {
+// Update order status
+exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderNumber } = req.params;
+    const { status } = req.body;
 
     const order = await Order.findOne({ orderNumber });
 
@@ -294,93 +257,25 @@ exports.resyncToZoho = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const result = await zohoService.syncOrderToZoho(order);
-
-    if (result.success) {
-      order.zohoSynced = true;
-      order.zohoDealId = result.dealId;
-      await order.save();
-    }
-
-    res.status(200).json({
-      success: result.success,
-      message: result.success ? 'Order resynced to Zoho' : 'Failed to sync',
-      zoho: result,
-    });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// Get order by ID
-exports.getOrderById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const order = await Order.findById(id);
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    res.status(200).json({
-      success: true,
-      order: {
-        id: order._id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        total: order.total,
-        subtotal: order.subtotal,
-        createdAt: order.createdAt,
-        customerInfo: order.customerInfo,
-        items: order.items.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          serviceName: item.serviceName,
-          category: item.category,
-        })),
-      },
-    });
-  } catch (error) {
-    console.error('Get order by ID error:', error);
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// Cancel order
-exports.cancelOrder = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { sessionId } = req.body;
-
-    const order = await Order.findOne({ _id: id, sessionId });
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    if (order.status === 'cancelled') {
-      return res.status(400).json({ success: false, message: 'Order is already cancelled' });
-    }
-
-    if (order.status === 'completed') {
-      return res.status(400).json({ success: false, message: 'Cannot cancel a completed order' });
-    }
-
-    order.status = 'cancelled';
+    order.status = status;
     await order.save();
 
+    // Update in Zoho CRM if deal ID exists
+    if (order.zohoDealId) {
+      try {
+        await zohoService.updateDealStatus(orderNumber, status, order.zohoDealId);
+      } catch (zohoError) {
+        console.error('Failed to update Zoho deal status:', zohoError.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Order cancelled successfully',
-      order: {
-        orderNumber: order.orderNumber,
-        status: order.status,
-      },
+      message: 'Order status updated',
+      order,
     });
   } catch (error) {
-    console.error('Cancel order error:', error);
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Update order status error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

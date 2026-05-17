@@ -1,34 +1,43 @@
+// /src/models/Order.js
 const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
-  productId: { type: String, default: null },
+  productId: { type: String },
   name: { type: String, required: true },
   price: { type: Number, required: true },
-  quantity: { type: Number, required: true, min: 1 },
-  image: String,
+  quantity: { type: Number, required: true, default: 1 },
+  image: { type: String },
+  category: { type: String },
   serviceItems: [{
     itemId: String,
     name: String,
     price: Number,
     quantity: Number,
   }],
-  selectedColor: String,
-  selectedSize: String,
-  designImage: String,
-  serviceName: { type: String, default: '' }, // Added to track which service items came from
-  category: { type: String, default: '' }, // Added to track category
+  selectedColor: { type: String },
+  selectedSize: { type: String },
+  designImage: { type: String },
+  metadata: { type: mongoose.Schema.Types.Mixed },
 });
 
 const orderSchema = new mongoose.Schema(
   {
-    orderNumber: { type: String, unique: true },
-    sessionId: { type: String, required: true },
+    orderNumber: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    sessionId: {
+      type: String,
+      required: true,
+      index: true,
+    },
     items: [orderItemSchema],
     subtotal: { type: Number, required: true, default: 0 },
-    deliveryFee: { type: Number, default: 0 }, // Changed to 0
-    tax: { type: Number, default: 0 }, // Changed to 0
+    deliveryFee: { type: Number, default: 0 },
+    tax: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
-    total: { type: Number, required: true },
+    total: { type: Number, required: true, default: 0 },
     status: {
       type: String,
       enum: ['pending', 'processing', 'completed', 'cancelled'],
@@ -41,29 +50,22 @@ const orderSchema = new mongoose.Schema(
       address: { type: String, required: true },
       city: { type: String, default: 'Dubai' },
       notes: { type: String, default: '' },
+      // ADD CRM PREFERENCES
+      crmPreferences: {
+        carpetContactEnabled: { type: Boolean, default: false },
+        shoesContactEnabled: { type: Boolean, default: false },
+      },
     },
-    // WhatsApp tracking
-    whatsappMessageId: { type: String, default: null },
-    whatsappSent: { type: Boolean, default: false },
-    whatsappSentAt: { type: Date, default: null },
-    // Zoho CRM tracking
-    zohoSynced: { type: Boolean, default: false },
-    zohoDealId: { type: String, default: null },
-    zohoContactId: { type: String, default: null },
-    zohoSyncedAt: { type: Date, default: null },
+    zohoDealId: { type: String },
+    zohoContactId: { type: String },
+    paymentMethod: { type: String, default: 'cash' },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
   },
   { timestamps: true }
 );
-
-// Generate order number before saving
-orderSchema.pre('save', async function () {
-  if (!this.orderNumber) {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const count = await this.constructor.countDocuments();
-    this.orderNumber = `ORD-${year}${month}-${(count + 1).toString().padStart(5, '0')}`;
-  }
-});
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -1,3 +1,4 @@
+// /src/models/Cart.js
 const mongoose = require('mongoose');
 
 const cartItemSchema = new mongoose.Schema({
@@ -45,13 +46,12 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Pre-save middleware to calculate totals
-cartSchema.pre('save', function (next) {
+// FIXED: Pre-save middleware - removed 'next' parameter and use function() not arrow
+cartSchema.pre('save', function () {
   this.subtotal = this.items.reduce(
     (sum, item) => sum + (item.price * item.quantity), 0
   );
   this.total = Math.max(0, this.subtotal - (this.discountAmount || 0));
-  next();
 });
 
 module.exports = mongoose.model('Cart', cartSchema);
