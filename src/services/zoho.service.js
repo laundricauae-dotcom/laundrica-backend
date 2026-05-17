@@ -108,25 +108,119 @@ class ZohoService {
 
     async createDeal(order, contactId) {
         try {
+
+            const itemsText = order.items.map(item =>
+                `• ${item.name} x${item.quantity} = AED ${(item.price * item.quantity).toFixed(2)}`
+            ).join('\n');
+
             const dealData = {
                 data: [{
                     Deal_Name: `Laundrica Order - ${order.orderNumber}`,
+
                     Stage: 'Qualification',
+
                     Amount: order.total,
-                    Closing_Date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    Description: this.generateOrderDescription(order),
-                    Contact_Person: contactId ? { id: contactId } : null,
+
+                    Closing_Date: new Date(
+                        Date.now() + 7 * 24 * 60 * 60 * 1000
+                    ).toISOString().split('T')[0],
+
+                    Contact_Person: contactId
+                        ? { id: contactId }
+                        : null,
+
+                    // CUSTOMER DETAILS
+
+                    Customer_Phone:
+                        order.customerInfo.phone || '',
+
+                    Customer_Email:
+                        order.customerInfo.email || '',
+
+                    Customer_Address:
+                        order.customerInfo.address || '',
+
+                    Customer_City:
+                        order.customerInfo.city || '',
+
+                    Customer_Notes:
+                        order.customerInfo.notes || '',
+
+                    // TOGGLE VALUES
+
+                    Carpet_Contact_Enabled:
+                        order.customerInfo.crmPreferences?.carpetContactEnabled || false,
+
+                    Shoes_Contact_Enabled:
+                        order.customerInfo.crmPreferences?.shoesContactEnabled || false,
+
+                    // ORDER DETAILS
+
+                    Order_Number:
+                        order.orderNumber,
+
+                    Order_Items:
+                        itemsText,
+
+                    Description: `
+Order Number: ${order.orderNumber}
+
+Customer Name:
+${order.customerInfo.name}
+
+Phone:
+${order.customerInfo.phone}
+
+Email:
+${order.customerInfo.email}
+
+Address:
+${order.customerInfo.address}
+
+City:
+${order.customerInfo.city}
+
+Carpet Contact Enabled:
+${order.customerInfo.crmPreferences?.carpetContactEnabled ? 'YES' : 'NO'}
+
+Shoes Contact Enabled:
+${order.customerInfo.crmPreferences?.shoesContactEnabled ? 'YES' : 'NO'}
+
+Items:
+${itemsText}
+
+Total:
+AED ${order.total}
+
+Notes:
+${order.customerInfo.notes || 'N/A'}
+                `,
                 }],
             };
 
-            const result = await this.makeRequest('POST', 'Deals', dealData);
+            const result = await this.makeRequest(
+                'POST',
+                'Deals',
+                dealData
+            );
+
             if (result.data && result.data[0]) {
-                console.log(`✅ Deal created: ${result.data[0].details.id}`);
+                console.log(
+                    `✅ Deal created: ${result.data[0].details.id}`
+                );
+
                 return result.data[0].details.id;
             }
+
             return null;
+
         } catch (error) {
-            console.error('❌ Deal creation failed:', error.message);
+
+            console.error(
+                '❌ Deal creation failed:',
+                error.response?.data || error.message
+            );
+
             return null;
         }
     }

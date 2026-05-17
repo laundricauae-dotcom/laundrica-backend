@@ -70,6 +70,7 @@ exports.createOrder = async (req, res) => {
         designImage: item.designImage,
         serviceName: item.serviceName || item.metadata?.serviceName || '',
         category: item.category || '',
+        metadata: item.metadata || {},
       })),
       subtotal,
       deliveryFee,
