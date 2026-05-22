@@ -754,11 +754,36 @@ const seedDatabase = async () => {
       }
 
       // For Wash & Fold service (bulk laundry)
+      // For Wash & Fold service (bulk laundry)
       if (product.slug.includes('wash-and-fold')) {
         const washFoldItems = [
-          { name: 'Laundry Bag (Small)', category: 'household', unit: 'bag', price: 25, description: 'Small laundry bag up to 5kg', sortOrder: 1 },
-          { name: 'Laundry Bag (Medium)', category: 'household', unit: 'bag', price: 40, description: 'Medium laundry bag up to 10kg', sortOrder: 2 },
-          { name: 'Laundry Bag (Large)', category: 'household', unit: 'bag', price: 70, description: 'Large laundry bag up to 20kg', sortOrder: 3 },
+          {
+            name: 'Laundry Bag (Small)',
+            category: 'household',
+            unit: 'kg',
+            price: 20,
+            description: 'Per kg rate. Minimum 3 kg required.',
+            sortOrder: 1,
+            minQuantity: 3  // ✅ ADD MINIMUM QUANTITY
+          },
+          {
+            name: 'Laundry Bag (Medium)',
+            category: 'household',
+            unit: 'kg',
+            price: 20,
+            description: 'Per kg rate. Minimum 3 kg required.',
+            sortOrder: 2,
+            minQuantity: 3  // ✅ ADD MINIMUM QUANTITY
+          },
+          {
+            name: 'Laundry Bag (Large)',
+            category: 'household',
+            unit: 'kg',
+            price: 20,
+            description: 'Per kg rate. Minimum 3 kg required.',
+            sortOrder: 3,
+            minQuantity: 3  // ✅ ADD MINIMUM QUANTITY
+          },
         ];
 
         for (const item of washFoldItems) {
@@ -769,9 +794,10 @@ const seedDatabase = async () => {
             price: item.price,
             unit: item.unit,
             description: item.description,
-            sortOrder: item.sortOrder, // ✅ ADD SORT ORDER
+            sortOrder: item.sortOrder,
             isActive: true,
-            contactForPricing: false
+            contactForPricing: false,
+            minQuantity: item.minQuantity  // ✅ ADD TO DATABASE
           });
         }
       }

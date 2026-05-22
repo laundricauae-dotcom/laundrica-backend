@@ -17,6 +17,9 @@ const serviceItemSchema = new mongoose.Schema(
     image: { type: String, default: null },
     imagePublicId: { type: String, default: null },
     contactForPricing: { type: Boolean, default: false }, // Add this field too
+    minQuantity: { type: Number, default: 1 }  // ✅ ADD THIS FIELD
+
+    
   },
   { timestamps: true }
 );
