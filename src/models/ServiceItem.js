@@ -4,7 +4,11 @@ const serviceItemSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-    category: { type: String, required: true, enum: ['men', 'women', 'children', 'household'] },
+    category: {
+      type: String,
+      required: true,
+      enum: ['men', 'women', 'children', 'household', 'special']  // Added 'special'
+    },
     price: { type: Number, required: true },
     unit: String,
     description: String,
@@ -12,6 +16,7 @@ const serviceItemSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     image: { type: String, default: null },
     imagePublicId: { type: String, default: null },
+    contactForPricing: { type: Boolean, default: false }, // Add this field too
   },
   { timestamps: true }
 );
