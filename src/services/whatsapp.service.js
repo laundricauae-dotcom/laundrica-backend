@@ -6,12 +6,12 @@ class AiSensyWhatsAppService {
         this.baseUrl = 'https://backend.aisensy.com/campaign/t1/api/';
         this.templateName = process.env.AISENSY_TEMPLATE_NAME || 'order_confirmation';
         this.languageCode = process.env.AISENSY_TEMPLATE_LANGUAGE || 'en';
-        this.instanceId = process.env.AISENSY_INSTANCE_ID; // You'll need this from AiSensy
+        this.instanceId = process.env.AISENSY_INSTANCE_ID;
     }
 
     async sendTemplateMessage(phoneNumber, countryCode, templateValues) {
         // Check if we have a real API key
-        if (!this.apiKey || this.apiKey === 'placeholder_will_add_later') {
+        if (!this.apiKey || this.apiKey === 'placeholder_will_add_later' || !this.instanceId) {
             console.log('\n📱 ========== WHATSAPP SIMULATION ==========');
             console.log(`✅ WhatsApp would be sent to: ${countryCode}${phoneNumber}`);
             console.log(`📝 Template: ${this.templateName}`);
@@ -26,7 +26,7 @@ class AiSensyWhatsAppService {
             const cleanedPhone = phoneNumber.replace(/\D/g, '');
             const fullPhoneNumber = `${countryCode}${cleanedPhone}`;
 
-            // Format template values for AiSensy (usually an object with keys)
+            // Format template values for AiSensy
             const templateParams = {};
             templateValues.forEach((value, index) => {
                 templateParams[`${index + 1}`] = value;
@@ -72,6 +72,9 @@ class AiSensyWhatsAppService {
         if (phoneMatch) {
             countryCode = phoneMatch[1];
             phoneNumber = phoneMatch[2];
+        } else {
+            // Remove any non-digit characters
+            phoneNumber = customerPhone.replace(/\D/g, '');
         }
 
         const trackingLink = `${process.env.FRONTEND_URL || 'https://laundrica.com'}/track/${order.orderNumber}`;

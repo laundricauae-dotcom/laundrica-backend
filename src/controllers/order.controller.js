@@ -1,82 +1,8 @@
-// /src/controllers/order.controller.js
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const zohoService = require('../services/zoho.service');
 const { v4: uuidv4 } = require('uuid');
-
-// WhatsApp service function
-const sendWhatsAppMessage = async (order, customerPhone) => {
-  try {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
-
-    // If using Twilio
-    if (accountSid && authToken && twilioWhatsAppNumber) {
-      const client = require('twilio')(accountSid, authToken);
-
-      const itemsList = order.items.map(item =>
-        `• ${item.name} x${item.quantity} = AED ${(item.price * item.quantity).toFixed(2)}`
-      ).join('\n');
-
-      const messageBody = `🫧 *LAUNDRICA ORDER CONFIRMED* 🫧
-
-Order #: ${order.orderNumber}
-
-Customer: ${order.customerInfo.name}
-Phone: ${order.customerInfo.phone}
-
-📦 *Items:*
-${itemsList}
-
-💰 *Total: AED ${order.total.toFixed(2)}*
-
-⏰ Expected Delivery: 24-48 hours
-
-Thank you for choosing Laundrica! ✨`;
-
-      await client.messages.create({
-        body: messageBody,
-        from: `whatsapp:${twilioWhatsAppNumber}`,
-        to: `whatsapp:${customerPhone}`
-      });
-
-      console.log(`✅ WhatsApp message sent to ${customerPhone}`);
-      return true;
-    }
-
-    // If using WhatsApp Business API via interakt
-    if (process.env.INTERAKT_API_KEY) {
-      const axios = require('axios');
-      const itemsList = order.items.map(item =>
-        `• ${item.name} x${item.quantity} = AED ${(item.price * item.quantity).toFixed(2)}`
-      ).join('\n');
-
-      const response = await axios.post('https://api.interakt.ai/v1/public/message/', {
-        channel: 'whatsapp',
-        to: customerPhone,
-        type: 'text',
-        text: {
-          body: `🫧 *LAUNDRICA ORDER CONFIRMED* 🫧\n\nOrder #: ${order.orderNumber}\n\nCustomer: ${order.customerInfo.name}\n\n📦 Items:\n${itemsList}\n\n💰 Total: AED ${order.total.toFixed(2)}\n\nThank you for choosing Laundrica! ✨`
-        }
-      }, {
-        headers: {
-          'Authorization': `Bearer ${process.env.INTERAKT_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log(`✅ WhatsApp message sent via Interakt to ${customerPhone}`);
-      return true;
-    }
-
-    console.log('⚠️ WhatsApp service not configured, skipping message');
-    return false;
-  } catch (error) {
-    console.error('❌ WhatsApp send error:', error.message);
-    return false;
-  }
-};
+const whatsappService = require('../services/whatsapp.service'); // Import the AiSensy service
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -119,7 +45,6 @@ exports.createOrder = async (req, res) => {
     }
 
     // Get carpet and shoes toggle preferences from localStorage (sent from frontend)
-    // The frontend sends these in the request body
     const carpetContactEnabled = req.body.carpetContactEnabled || false;
     const shoesContactEnabled = req.body.shoesContactEnabled || false;
 
@@ -168,10 +93,16 @@ exports.createOrder = async (req, res) => {
       console.error('❌ Zoho sync error:', zohoError.message);
     }
 
-    // Send WhatsApp message
+    // Send WhatsApp message using AiSensy service
+    let whatsappResult = null;
     try {
-      const formattedPhone = customerInfo.phone.replace(/^\+/, '').replace(/\s/g, '');
-      await sendWhatsAppMessage(order, formattedPhone);
+      console.log(`📱 Sending WhatsApp confirmation to ${customerInfo.phone}...`);
+      whatsappResult = await whatsappService.sendOrderConfirmation(order, customerInfo.phone);
+      if (whatsappResult.success) {
+        console.log(`✅ WhatsApp sent successfully${whatsappResult.simulated ? ' (simulated mode)' : ''}`);
+      } else {
+        console.error(`❌ WhatsApp failed: ${whatsappResult.error}`);
+      }
     } catch (whatsappError) {
       console.error('❌ WhatsApp error:', whatsappError.message);
     }
@@ -195,7 +126,8 @@ exports.createOrder = async (req, res) => {
         status: order.status,
         createdAt: order.createdAt,
       },
-      whatsappLink: `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
+      whatsappLink: `https://wa.me/${customerInfo.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
+      whatsappSent: whatsappResult?.success || false,
     });
 
   } catch (error) {
@@ -207,7 +139,7 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// Get order by number
+// Get order by number (track order)
 exports.getOrderByNumber = async (req, res) => {
   try {
     const { orderNumber } = req.params;
@@ -276,6 +208,41 @@ exports.updateOrderStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Update order status error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Track order (alias for getOrderByNumber)
+exports.trackOrder = exports.getOrderByNumber;
+
+// Resync order to Zoho
+exports.resyncToZoho = async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+
+    const order = await Order.findOne({ orderNumber });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const syncResult = await zohoService.syncOrderToZoho(order);
+
+    if (syncResult.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Order resynced to Zoho successfully',
+        zohoDealId: order.zohoDealId,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to sync to Zoho',
+        error: syncResult.error,
+      });
+    }
+  } catch (error) {
+    console.error('Resync to Zoho error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
