@@ -1,11 +1,12 @@
 const axios = require('axios');
 
-class InteraktWhatsAppService {
+class AiSensyWhatsAppService {
     constructor() {
-        this.apiKey = process.env.INTERAKT_API_KEY;
-        this.baseUrl = 'https://api.interakt.ai/v1/public/';
-        this.templateName = process.env.INTERAKT_TEMPLATE_NAME || 'order_confirmation';
-        this.languageCode = process.env.INTERAKT_TEMPLATE_LANGUAGE || 'en';
+        this.apiKey = process.env.AISENSY_API_KEY;
+        this.baseUrl = 'https://backend.aisensy.com/campaign/t1/api/';
+        this.templateName = process.env.AISENSY_TEMPLATE_NAME || 'order_confirmation';
+        this.languageCode = process.env.AISENSY_TEMPLATE_LANGUAGE || 'en';
+        this.instanceId = process.env.AISENSY_INSTANCE_ID; // You'll need this from AiSensy
     }
 
     async sendTemplateMessage(phoneNumber, countryCode, templateValues) {
@@ -15,46 +16,50 @@ class InteraktWhatsAppService {
             console.log(`✅ WhatsApp would be sent to: ${countryCode}${phoneNumber}`);
             console.log(`📝 Template: ${this.templateName}`);
             console.log(`📋 Values:`, templateValues);
-            console.log(`🔧 Get Interakt API key from: https://app.interakt.ai`);
+            console.log(`🔧 Get AiSensy API key from: https://app.aisensy.com`);
             console.log('===========================================\n');
             return { success: true, simulated: true, messageId: `sim_${Date.now()}` };
         }
 
-        // Real API call
+        // Real API call for AiSensy
         try {
             const cleanedPhone = phoneNumber.replace(/\D/g, '');
+            const fullPhoneNumber = `${countryCode}${cleanedPhone}`;
+
+            // Format template values for AiSensy (usually an object with keys)
+            const templateParams = {};
+            templateValues.forEach((value, index) => {
+                templateParams[`${index + 1}`] = value;
+            });
 
             const requestBody = {
-                countryCode: countryCode,
-                phoneNumber: cleanedPhone,
-                type: "Template",
-                template: {
-                    name: this.templateName,
-                    languageCode: this.languageCode,
-                    bodyValues: templateValues
-                }
+                apiKey: this.apiKey,
+                instanceId: this.instanceId,
+                template_name: this.templateName,
+                language: this.languageCode,
+                phoneNumber: fullPhoneNumber,
+                template_params: templateParams
             };
 
-            console.log(`📤 Sending WhatsApp to ${countryCode}${cleanedPhone}...`);
+            console.log(`📤 Sending WhatsApp to ${fullPhoneNumber}...`);
 
             const response = await axios.post(
-                `${this.baseUrl}message/`,
+                `${this.baseUrl}sendTemplate`,
                 requestBody,
                 {
                     headers: {
-                        'Authorization': `Basic ${this.apiKey}`,
                         'Content-Type': 'application/json'
                     }
                 }
             );
 
-            if (response.data.result) {
-                console.log(`✅ WhatsApp sent! Message ID: ${response.data.id}`);
-                return { success: true, messageId: response.data.id };
+            if (response.data.status === 'success') {
+                console.log(`✅ WhatsApp sent! Message ID: ${response.data.message_id || response.data.id}`);
+                return { success: true, messageId: response.data.message_id || response.data.id };
             }
             return { success: false, error: response.data.message };
         } catch (error) {
-            console.error('❌ Interakt API error:', error.response?.data || error.message);
+            console.error('❌ AiSensy API error:', error.response?.data || error.message);
             return { success: false, error: error.response?.data?.message || error.message };
         }
     }
@@ -115,4 +120,4 @@ class InteraktWhatsAppService {
     }
 }
 
-module.exports = new InteraktWhatsAppService();
+module.exports = new AiSensyWhatsAppService();
