@@ -19,7 +19,7 @@ const products = [
     description: 'Professional laundry cleaning with premium detergents and expert garment care.',
     price: 0,
     category: 'laundry',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBaHDEQVLbQfnwFR9_VyvfLd-ko007XGQDbe8hwTsWY87HzOxSF5OEi1VIUhphuEPzTyIEYGuar_lQbl5IcLFr6Dnz7X7Z7pctJxklYiZfa-c9MxeiY35ivv9-1g0LOse4jxv133UHtIinIC088t7NfjZ_PC9rleHHBGmlsZ69ybT_UKrJ4utQTtvinL1UeEgulkfcg2nUWiJ2DIJYYhlitbNGfkogR5s0XfbMFFqM3gQtqlpbRweKf5r0np3KX1dvRGk_0eUCe4tVi',
+    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBaHDEQVLbQfnwFR9_VyvfLd-ko007XGQDbe8hwTsWY87HzOxSF5OEi1VIUhphuEPzTyIEYGuar_lQ5blIcLFr6Dnz7X7Z7pctJxklYiZfa-c9MxeiY35ivv9-1g0LOse4jxv133UHtIinIC088t7NfjZ_PC9rleHHBGmlsZ69ybT_UKrJ4utQTtvinL1UeEgulkfcg2nUWiJ2DIJYYhlitbNGfkogR5s0XfbMFFqM3gQtqlpbRweKf5r0np3KX1dvRGk_0eUCe4tVi',
     isActive: true,
     isFeatured: true,
     turnaround: '24-48 hours',
@@ -92,6 +92,145 @@ const products = [
     serviceType: 'carpet'
   },
 ];
+
+// Define the exact order for each category
+const ITEM_ORDER = {
+  men: [
+    'T-Shirt',
+    'Shirt',
+    'Trousers',
+    'Pants',
+    'Jeans',
+    'Shorts',
+    'Pyjama',
+    'Lungi',
+    'Handkerchief',
+    'Kandoora',
+    'Thobe / Dishdasha',
+    'Ghatra',
+    'Scarf / Muffler',
+    'Suit 2 Piece',
+    'Suit 3 Piece',
+    'Blazer',
+    'Waist Coat',
+    'Tie',
+    'Cap',
+    'Jacket',
+    'Coat',
+    'Long Coat',
+    'Leather Jacket (Special)',
+    'Pyjama (Woolen)',
+    'Sweater',
+    'Pullover / Hoodie',
+    'Inner Wear (Woolen)',
+    'Undershirt',
+    'Underwear',
+    'Pair of Socks',
+    'Gym Wear / Sportswear',
+    'Sports Jersey / Team Kit',
+    'Swimwear / Trunks'
+  ],
+  women: [
+    'T-Shirt',
+    'Shirt',
+    'Trousers',
+    'Pant',
+    'Jeans',
+    'Leggings',
+    'Crop Top',
+    'Handkerchief',
+    'Abaya',
+    'Abaya (Special)',
+    'Hijab',
+    'Niqab',
+    'Scarf / Dupatta',
+    'Salwar',
+    'Kameez',
+    'Saree',
+    'Skirt Half',
+    'Skirt Full',
+    'Full Dress (Normal)',
+    'Full Dress (Woolen)',
+    'Party Dress (Special)',
+    'Evening Gown',
+    'Wedding Dress / Bridal Gown',
+    'Kimono / Dressing Gown',
+    'Blouse',
+    'Top (Woolen)',
+    'Cardigan',
+    'Sweater',
+    'Pullover / Hoodie',
+    'Pyjama (Woolen)',
+    'Suit 2 Piece',
+    'Suit 3 Piece',
+    'Blazer',
+    'Coat',
+    'Jacket',
+    'Long Coat',
+    'Bra and Inners',
+    'Underwear',
+    'Swimsuit / Burkini',
+    'Gym Wear / Sportswear',
+    'Sports Jersey / Team Kit'
+  ],
+  children: [
+    'T-Shirt',
+    'Shirt',
+    'Trousers / Pants',
+    'Jeans',
+    'Shorts',
+    'Dress',
+    'Skirt',
+    'Leggings',
+    'Jumpsuit / Playsuit',
+    'Romper',
+    'Onesie / Bodysuit',
+    'Kandoora',
+    'Thobe / Dishdasha',
+    'Abaya',
+    'Salwar Kameez',
+    'Traditional / Ceremonial Dress',
+    'Ghatra / Scarf',
+    'School Shirt',
+    'School Trousers / Skirt',
+    'School Blazer / Jacket',
+    'School Tie',
+    'School PE Kit / Sports Uniform',
+    'Jacket',
+    'Coat',
+    'Hoodie / Pullover',
+    'Sweater / Cardigan'
+  ],
+  household: [
+    'Bed Sheet Single',
+    'Bed Sheet Double',
+    'Duvet Cover Single',
+    'Duvet Cover Double',
+    'Pillow Cover / Cushion Cover',
+    'Mattress Protector / Topper',
+    'Baby Blanket',
+    'Duvet Small',
+    'Duvet Medium',
+    'Duvet Large',
+    'Blanket Single',
+    'Blanket Double',
+    'Pillow',
+    'Cushion',
+    'Bath Towel Medium',
+    'Bath Towel Large',
+    'Bath Robe',
+    'Hand Towel',
+    'Face Towel',
+    'Table Cloth',
+    'Table Runner',
+    'Napkins / Dinner Napkins',
+    'Kitchen Apron',
+    'Curtains (Light)',
+    'Curtains (Heavy)',
+    'Sofa Cover / Slipcover',
+    'Prayer Mat'
+  ]
+};
 
 // Service items data with prices for each service type
 const serviceItemsData = {
@@ -352,9 +491,8 @@ const priceMapping = {
     'Swimwear / Trunks': { 'wash-press': 6, 'press-only': null, 'dry-clean': null },
   },
 
-  // WOMEN prices
+  // WOMEN prices (same as men for most items)
   women: {
-    // Everyday Wear
     'T-Shirt': { 'wash-press': 7, 'press-only': 4, 'dry-clean': 10 },
     'Shirt': { 'wash-press': 7, 'press-only': 4, 'dry-clean': 10 },
     'Trousers': { 'wash-press': 7, 'press-only': 4, 'dry-clean': 10 },
@@ -363,8 +501,6 @@ const priceMapping = {
     'Leggings': { 'wash-press': 8, 'press-only': 5, 'dry-clean': 10 },
     'Crop Top': { 'wash-press': 7, 'press-only': 4, 'dry-clean': 10 },
     'Handkerchief': { 'wash-press': 2, 'press-only': 2, 'dry-clean': null },
-
-    // Ethnic & Regional Wear
     'Abaya': { 'wash-press': 15, 'press-only': 10, 'dry-clean': 20 },
     'Abaya (Special)': { 'wash-press': 25, 'press-only': 15, 'dry-clean': 30 },
     'Hijab': { 'wash-press': 10, 'press-only': 8, 'dry-clean': 15 },
@@ -373,8 +509,6 @@ const priceMapping = {
     'Salwar': { 'wash-press': 8, 'press-only': 5, 'dry-clean': 12 },
     'Kameez': { 'wash-press': 8, 'press-only': 5, 'dry-clean': 12 },
     'Saree': { 'wash-press': null, 'press-only': 15, 'dry-clean': 30 },
-
-    // Dresses & Skirts
     'Skirt Half': { 'wash-press': 8, 'press-only': 5, 'dry-clean': 12 },
     'Skirt Full': { 'wash-press': 10, 'press-only': 6, 'dry-clean': 15 },
     'Full Dress (Normal)': { 'wash-press': 12, 'press-only': 6, 'dry-clean': 15 },
@@ -383,36 +517,27 @@ const priceMapping = {
     'Evening Gown': { 'wash-press': null, 'press-only': 10, 'dry-clean': 20 },
     'Wedding Dress / Bridal Gown': { 'wash-press': null, 'press-only': 20, 'dry-clean': null, 'contactForPricing': true },
     'Kimono / Dressing Gown': { 'wash-press': 14, 'press-only': 16, 'dry-clean': 28 },
-
-    // Tops & Knitwear
     'Blouse': { 'wash-press': 8, 'press-only': 4, 'dry-clean': 12 },
     'Top (Woolen)': { 'wash-press': null, 'press-only': 8, 'dry-clean': 12 },
     'Cardigan': { 'wash-press': null, 'press-only': 8, 'dry-clean': 12 },
     'Sweater': { 'wash-press': null, 'press-only': 8, 'dry-clean': 15 },
     'Pullover / Hoodie': { 'wash-press': 12, 'press-only': 6, 'dry-clean': 15 },
     'Pyjama (Woolen)': { 'wash-press': null, 'press-only': 10, 'dry-clean': 20 },
-
-    // Formal & Tailored
     'Suit 2 Piece': { 'wash-press': null, 'press-only': 12, 'dry-clean': 28 },
     'Suit 3 Piece': { 'wash-press': null, 'press-only': 15, 'dry-clean': 38 },
     'Blazer': { 'wash-press': null, 'press-only': 12, 'dry-clean': 18 },
     'Coat': { 'wash-press': null, 'press-only': 12, 'dry-clean': 20 },
     'Jacket': { 'wash-press': null, 'press-only': 12, 'dry-clean': 20 },
     'Long Coat': { 'wash-press': null, 'press-only': 14, 'dry-clean': 25 },
-
-    // Innerwear & Basics
     'Bra and Inners': { 'wash-press': 8, 'press-only': null, 'dry-clean': null },
     'Underwear': { 'wash-press': 8, 'press-only': null, 'dry-clean': null },
     'Swimsuit / Burkini': { 'wash-press': 8, 'press-only': null, 'dry-clean': null },
-
-    // Sports & Gym
     'Gym Wear / Sportswear': { 'wash-press': 8, 'press-only': null, 'dry-clean': null },
     'Sports Jersey / Team Kit': { 'wash-press': 8, 'press-only': null, 'dry-clean': null },
   },
 
   // CHILDREN prices
   children: {
-    // Everyday Wear
     'T-Shirt': { 'wash-press': 5, 'press-only': 3, 'dry-clean': 8 },
     'Shirt': { 'wash-press': 5, 'press-only': 3, 'dry-clean': 8 },
     'Trousers / Pants': { 'wash-press': 6, 'press-only': 4, 'dry-clean': 8 },
@@ -424,23 +549,17 @@ const priceMapping = {
     'Jumpsuit / Playsuit': { 'wash-press': 8, 'press-only': 4, 'dry-clean': 10 },
     'Romper': { 'wash-press': 8, 'press-only': 4, 'dry-clean': 10 },
     'Onesie / Bodysuit': { 'wash-press': 8, 'press-only': null, 'dry-clean': 10 },
-
-    // Ethnic & Regional Wear
     'Kandoora': { 'wash-press': 10, 'press-only': 5, 'dry-clean': 14 },
     'Thobe / Dishdasha': { 'wash-press': 10, 'press-only': 5, 'dry-clean': 14 },
     'Abaya': { 'wash-press': null, 'press-only': 6, 'dry-clean': 16 },
     'Salwar Kameez': { 'wash-press': 14, 'press-only': 6, 'dry-clean': 20 },
     'Traditional / Ceremonial Dress': { 'wash-press': null, 'press-only': 6, 'dry-clean': 20 },
     'Ghatra / Scarf': { 'wash-press': null, 'press-only': 6, 'dry-clean': 20 },
-
-    // School Uniform
     'School Shirt': { 'wash-press': 6, 'press-only': 3, 'dry-clean': null },
     'School Trousers / Skirt': { 'wash-press': 6, 'press-only': 3, 'dry-clean': null },
     'School Blazer / Jacket': { 'wash-press': null, 'press-only': 6, 'dry-clean': 20 },
     'School Tie': { 'wash-press': null, 'press-only': null, 'dry-clean': 4 },
     'School PE Kit / Sports Uniform': { 'wash-press': 10, 'press-only': null, 'dry-clean': 18 },
-
-    // Outerwear & Knitwear
     'Jacket': { 'wash-press': null, 'press-only': 10, 'dry-clean': 15 },
     'Coat': { 'wash-press': null, 'press-only': 10, 'dry-clean': 15 },
     'Hoodie / Pullover': { 'wash-press': 10, 'press-only': 6, 'dry-clean': 15 },
@@ -449,7 +568,6 @@ const priceMapping = {
 
   // HOUSEHOLD prices
   household: {
-    // Bed Linen
     'Bed Sheet Single': { 'wash-press': 12, 'press-only': 6, 'dry-clean': null },
     'Bed Sheet Double': { 'wash-press': 16, 'press-only': 8, 'dry-clean': null },
     'Duvet Cover Single': { 'wash-press': 12, 'press-only': 6, 'dry-clean': null },
@@ -457,8 +575,6 @@ const priceMapping = {
     'Pillow Cover / Cushion Cover': { 'wash-press': 6, 'press-only': 4, 'dry-clean': null },
     'Mattress Protector / Topper': { 'wash-press': 10, 'press-only': null, 'dry-clean': null },
     'Baby Blanket': { 'wash-press': 6, 'press-only': null, 'dry-clean': null },
-
-    // Duvets & Blankets
     'Duvet Small': { 'wash-press': 15, 'press-only': null, 'dry-clean': 20 },
     'Duvet Medium': { 'wash-press': 20, 'press-only': null, 'dry-clean': 25 },
     'Duvet Large': { 'wash-press': 25, 'press-only': null, 'dry-clean': 30 },
@@ -466,40 +582,29 @@ const priceMapping = {
     'Blanket Double': { 'wash-press': 20, 'press-only': null, 'dry-clean': 30 },
     'Pillow': { 'wash-press': 6, 'press-only': null, 'dry-clean': 10 },
     'Cushion': { 'wash-press': 10, 'press-only': null, 'dry-clean': 10 },
-
-    // Bath & Robes
     'Bath Towel Medium': { 'wash-press': 10, 'press-only': null, 'dry-clean': 14 },
     'Bath Towel Large': { 'wash-press': 12, 'press-only': null, 'dry-clean': 16 },
     'Bath Robe': { 'wash-press': 15, 'press-only': 8, 'dry-clean': 20 },
     'Hand Towel': { 'wash-press': 4, 'press-only': null, 'dry-clean': 6 },
     'Face Towel': { 'wash-press': 4, 'press-only': null, 'dry-clean': 6 },
-
-    // Table Linen
     'Table Cloth': { 'wash-press': 6, 'press-only': 3, 'dry-clean': 10 },
     'Table Runner': { 'wash-press': 6, 'press-only': 3, 'dry-clean': 10 },
     'Napkins / Dinner Napkins': { 'wash-press': 4, 'press-only': 3, 'dry-clean': 8 },
     'Kitchen Apron': { 'wash-press': 7, 'press-only': 5, 'dry-clean': 15 },
-
-    // Curtains & Covers
     'Curtains (Light)': { 'wash-press': null, 'press-only': null, 'dry-clean': null, 'contactForPricing': true },
     'Curtains (Heavy)': { 'wash-press': null, 'press-only': null, 'dry-clean': null, 'contactForPricing': true },
     'Sofa Cover / Slipcover': { 'wash-press': 80, 'press-only': null, 'dry-clean': 150 },
-
-    // Prayer & Miscellaneous
     'Prayer Mat': { 'wash-press': 10, 'press-only': null, 'dry-clean': 15 },
   },
 
   // SPECIAL prices
   special: {
-    // Uniforms
     'Police Dress': { 'wash-press': 20, 'press-only': 10, 'dry-clean': 30 },
     'Security Uniform': { 'wash-press': 15, 'press-only': 10, 'dry-clean': 20 },
     'Chef Uniform': { 'wash-press': 15, 'press-only': 10, 'dry-clean': 25 },
     'Nurse / Medical Uniform': { 'wash-press': 20, 'press-only': 10, 'dry-clean': 25 },
     'School Uniform': { 'wash-press': 20, 'press-only': 10, 'dry-clean': 25 },
     'Sports Jersey / Team Kit': { 'wash-press': 20, 'press-only': 10, 'dry-clean': 30 },
-
-    // Occasion & Ceremonial
     'Wedding Dress / Bridal Gown': { 'wash-press': null, 'press-only': null, 'dry-clean': null, 'contactForPricing': true },
     'Kandoora (Embroidered / Special)': { 'wash-press': null, 'press-only': null, 'dry-clean': null, 'contactForPricing': true },
     'Evening Gown': { 'wash-press': null, 'press-only': null, 'dry-clean': null, 'contactForPricing': true },
@@ -516,6 +621,14 @@ const getServiceType = (slug) => {
   if (slug.includes('shoe-care')) return 'shoe-care';
   if (slug.includes('carpet-care')) return 'carpet';
   return null;
+};
+
+// Helper function to get sort order for an item
+const getSortOrder = (category, itemName) => {
+  const orderArray = ITEM_ORDER[category];
+  if (!orderArray) return 999;
+  const index = orderArray.indexOf(itemName);
+  return index >= 0 ? index : 999;
 };
 
 const seedDatabase = async () => {
@@ -560,7 +673,7 @@ const seedDatabase = async () => {
               price: priceInfo[serviceType],
               unit: item.unit,
               description: item.description,
-              sortOrder: 0,
+              sortOrder: getSortOrder('men', item.name), // ✅ ADD SORT ORDER
               isActive: true,
               contactForPricing: priceInfo.contactForPricing || false
             });
@@ -578,7 +691,7 @@ const seedDatabase = async () => {
               price: priceInfo[serviceType],
               unit: item.unit,
               description: item.description,
-              sortOrder: 0,
+              sortOrder: getSortOrder('women', item.name), // ✅ ADD SORT ORDER
               isActive: true,
               contactForPricing: priceInfo.contactForPricing || false
             });
@@ -596,7 +709,7 @@ const seedDatabase = async () => {
               price: priceInfo[serviceType],
               unit: item.unit,
               description: item.description,
-              sortOrder: 0,
+              sortOrder: getSortOrder('children', item.name), // ✅ ADD SORT ORDER
               isActive: true,
               contactForPricing: priceInfo.contactForPricing || false
             });
@@ -614,7 +727,7 @@ const seedDatabase = async () => {
               price: priceInfo[serviceType],
               unit: item.unit,
               description: item.description,
-              sortOrder: 0,
+              sortOrder: getSortOrder('household', item.name), // ✅ ADD SORT ORDER
               isActive: true,
               contactForPricing: priceInfo.contactForPricing || false
             });
@@ -632,7 +745,7 @@ const seedDatabase = async () => {
               price: priceInfo[serviceType],
               unit: item.unit,
               description: item.description,
-              sortOrder: 0,
+              sortOrder: getSortOrder('household', item.name), // ✅ ADD SORT ORDER
               isActive: true,
               contactForPricing: priceInfo.contactForPricing || false
             });
@@ -642,11 +755,10 @@ const seedDatabase = async () => {
 
       // For Wash & Fold service (bulk laundry)
       if (product.slug.includes('wash-and-fold')) {
-        // Add simplified items for wash & fold
         const washFoldItems = [
-          { name: 'Laundry Bag (Small)', category: 'household', unit: 'bag', price: 25, description: 'Small laundry bag up to 5kg' },
-          { name: 'Laundry Bag (Medium)', category: 'household', unit: 'bag', price: 40, description: 'Medium laundry bag up to 10kg' },
-          { name: 'Laundry Bag (Large)', category: 'household', unit: 'bag', price: 70, description: 'Large laundry bag up to 20kg' },
+          { name: 'Laundry Bag (Small)', category: 'household', unit: 'bag', price: 25, description: 'Small laundry bag up to 5kg', sortOrder: 1 },
+          { name: 'Laundry Bag (Medium)', category: 'household', unit: 'bag', price: 40, description: 'Medium laundry bag up to 10kg', sortOrder: 2 },
+          { name: 'Laundry Bag (Large)', category: 'household', unit: 'bag', price: 70, description: 'Large laundry bag up to 20kg', sortOrder: 3 },
         ];
 
         for (const item of washFoldItems) {
@@ -657,7 +769,7 @@ const seedDatabase = async () => {
             price: item.price,
             unit: item.unit,
             description: item.description,
-            sortOrder: 0,
+            sortOrder: item.sortOrder, // ✅ ADD SORT ORDER
             isActive: true,
             contactForPricing: false
           });

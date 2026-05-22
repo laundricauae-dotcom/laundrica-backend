@@ -92,6 +92,7 @@ exports.getServiceCategories = async (req, res) => {
 exports.getServiceItemsForProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    // ✅ SORT BY sortOrder ASCENDING (0, 1, 2, 3...)
     const items = await ServiceItem.find({ serviceId: id, isActive: true }).sort('sortOrder');
     res.status(200).json({ success: true, items });
   } catch (error) {
