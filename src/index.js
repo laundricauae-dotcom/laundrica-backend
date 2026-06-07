@@ -52,12 +52,15 @@ const cartRoutes = require('./routes/cart.routes');
 const productRoutes = require('./routes/product.routes');
 const serviceRoutes = require('./routes/service.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const contactRoutes = require('./routes/contact.routes');
+
 
 // Apply cache to GET routes (5 minutes cache)
 app.use('/api/products', cacheMiddleware(300), productRoutes);
 app.use('/api/services', cacheMiddleware(300), serviceRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/contact', contactRoutes);
 app.use('/webhook', webhookRoutes);
 
 // Health check (no cache)
