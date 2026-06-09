@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
-const compression = require('compression'); // Add this import
+const compression = require('compression');
 
 // Load env
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -15,35 +15,30 @@ const {
   corsMiddleware,
   securityHeaders,
   sanitize,
-  // compress, // Remove from here - we'll configure manually
   cacheMiddleware,
 } = require('./middleware');
 
 const app = express();
 
 // ========== GLOBAL MIDDLEWARES ==========
-app.use(corsMiddleware);           // CORS first
-app.use(securityHeaders);          // Security headers
+app.use(corsMiddleware);
+app.use(securityHeaders);
 
-// Configure compression properly
 app.use(compression({
   level: 6,
   threshold: 1024,
-  // Don't compress API routes
   filter: (req, res) => {
     if (req.path && req.path.startsWith('/api/')) {
-      return false; // Skip compression for API routes
+      return false;
     }
-    return true; // Compress everything else
+    return true;
   }
 }));
 
-app.use(logger);                   // Request logging
-app.use(sanitize);                 // Input sanitization
-app.use(express.json({ limit: '10mb' }));  // JSON parsing
+app.use(logger);
+app.use(sanitize);
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Rate limiting (100 requests per 15 minutes)
 app.use(rateLimit(15 * 60 * 1000, 100));
 
 // Routes
@@ -54,16 +49,15 @@ const serviceRoutes = require('./routes/service.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const contactRoutes = require('./routes/contact.routes');
 
-
-// Apply cache to GET routes (5 minutes cache)
+// IMPORTANT: Register all routes
 app.use('/api/products', cacheMiddleware(300), productRoutes);
 app.use('/api/services', cacheMiddleware(300), serviceRoutes);
-app.use('/api/orders', orderRoutes);
+app.use('/api/orders', orderRoutes);  // This includes your updated order controller
 app.use('/api/cart', cartRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/webhook', webhookRoutes);
 
-// Health check (no cache)
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -80,7 +74,7 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler (must be last)
+// Global error handler
 app.use(errorHandler);
 
 // MongoDB connection
@@ -89,15 +83,18 @@ mongoose
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch((err) => console.error('❌ MongoDB connection error:', err));
 
+// Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📦 API endpoints:`);
-  console.log(`   - GET    /api/products`);
-  console.log(`   - GET    /api/services`);
-  console.log(`   - POST   /api/orders`);
-  console.log(`   - GET    /api/orders/track/:id`);
-  console.log(`   - GET    /api/cart/:sessionId`);
-  console.log(`   - POST   /api/cart/:sessionId/add`);
-  console.log(`   - POST   /webhook/zoho/order-update`);
+  console.log(`   - POST   /api/orders - Create order (with Zoho Flow)`);
+  console.log(`   - GET    /api/orders/track/:id - Track order`);
+  console.log(`   - POST   /api/orders/:orderNumber/resync - Resync to Zoho`);
+  console.log(`   - GET    /api/products - Get products`);
+  console.log(`   - GET    /api/services - Get services`);
+  console.log(`   - GET    /api/cart/:sessionId - Get cart`);
+  console.log(`   - POST   /api/cart/:sessionId/add - Add to cart`);
 });
+
+module.exports = app;

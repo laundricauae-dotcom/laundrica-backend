@@ -1,8 +1,10 @@
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
-const zohoService = require('../services/zoho.service');
 const { v4: uuidv4 } = require('uuid');
-const whatsappService = require('../services/whatsapp.service'); // Import the AiSensy service
+const whatsappService = require('../services/whatsapp.service');
+
+// Zoho Flow Webhook URL
+const ZOHO_FLOW_URL = "https://flow.zoho.com/925120593/flow/webhook/incoming?zapikey=PASTE_MY_ZAPIKEY_HERE&isdebug=false";
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -12,6 +14,46 @@ const generateOrderNumber = () => {
   const day = date.getDate().toString().padStart(2, '0');
   const random = Math.floor(Math.random() * 1000).toString().padStart(4, '0');
   return `ORD-${year}${month}${day}-${random}`;
+};
+
+// Function to send data to Zoho Flow
+const sendToZohoFlow = async (payload) => {
+  try {
+    console.log("====================================");
+    console.log("🚀 SENDING TO ZOHO FLOW");
+    console.log("====================================");
+    console.log("Webhook URL:", ZOHO_FLOW_URL);
+    console.log("Zoho Payload:", JSON.stringify(payload, null, 2));
+
+    const response = await fetch(ZOHO_FLOW_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log("Zoho Status:", response.status, response.statusText);
+
+    const responseText = await response.text();
+    console.log("Zoho Response:", responseText);
+
+    if (!response.ok) {
+      console.error("❌ ZOHO FLOW FAILED");
+      console.error("Status:", response.status);
+      console.error("Response:", responseText);
+      return { success: false, error: `HTTP ${response.status}: ${responseText}` };
+    }
+
+    console.log("✅ ZOHO FLOW SUCCESS");
+    console.log("====================================");
+    return { success: true, response: responseText };
+  } catch (error) {
+    console.error("❌ ZOHO FLOW ERROR");
+    console.error(error);
+    console.log("====================================");
+    return { success: false, error: error.message };
+  }
 };
 
 // Create order
@@ -51,6 +93,9 @@ exports.createOrder = async (req, res) => {
     // Create order number
     const orderNumber = generateOrderNumber();
 
+    // Calculate items count
+    const itemsCount = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
     // Create order object
     const orderData = {
       orderNumber,
@@ -80,18 +125,25 @@ exports.createOrder = async (req, res) => {
     console.log(`🪙 Carpet Contact Enabled: ${carpetContactEnabled ? 'YES' : 'NO'}`);
     console.log(`👟 Shoes Contact Enabled: ${shoesContactEnabled ? 'YES' : 'NO'}`);
 
-    // Sync to Zoho CRM
-    try {
-      console.log(`🔄 Syncing order ${orderNumber} to Zoho CRM...`);
-      const syncResult = await zohoService.syncOrderToZoho(order);
-      if (syncResult.success) {
-        console.log(`✅ Order ${orderNumber} synced to Zoho CRM`);
-      } else {
-        console.error(`❌ Failed to sync order ${orderNumber} to Zoho:`, syncResult.error);
-      }
-    } catch (zohoError) {
-      console.error('❌ Zoho sync error:', zohoError.message);
-    }
+    // Send to Zoho Flow (does not block order creation)
+    const zohoPayload = {
+      name: customerInfo.name,
+      phone: customerInfo.phone,
+      email: customerInfo.email || "",
+      address: `${customerInfo.address}, ${customerInfo.city || 'Dubai'}`,
+      source: "WB",
+      orderTotal: order.total,
+      itemsCount: itemsCount,
+      orderNumber: orderNumber,
+      notes: customerInfo.notes || "",
+      carpetContact: carpetContactEnabled,
+      shoesContact: shoesContactEnabled
+    };
+
+    // Call Zoho Flow asynchronously (don't await to avoid blocking response)
+    sendToZohoFlow(zohoPayload).catch(err => {
+      console.error("Unhandled Zoho Flow error:", err);
+    });
 
     // Send WhatsApp message using AiSensy service
     let whatsappResult = null;
@@ -192,15 +244,6 @@ exports.updateOrderStatus = async (req, res) => {
     order.status = status;
     await order.save();
 
-    // Update in Zoho CRM if deal ID exists
-    if (order.zohoDealId) {
-      try {
-        await zohoService.updateDealStatus(orderNumber, status, order.zohoDealId);
-      } catch (zohoError) {
-        console.error('Failed to update Zoho deal status:', zohoError.message);
-      }
-    }
-
     res.status(200).json({
       success: true,
       message: 'Order status updated',
@@ -215,7 +258,7 @@ exports.updateOrderStatus = async (req, res) => {
 // Track order (alias for getOrderByNumber)
 exports.trackOrder = exports.getOrderByNumber;
 
-// Resync order to Zoho
+// Resync order to Zoho Flow
 exports.resyncToZoho = async (req, res) => {
   try {
     const { orderNumber } = req.params;
@@ -226,19 +269,37 @@ exports.resyncToZoho = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const syncResult = await zohoService.syncOrderToZoho(order);
+    const itemsCount = order.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+    const carpetContact = order.customerInfo?.crmPreferences?.carpetContactEnabled || false;
+    const shoesContact = order.customerInfo?.crmPreferences?.shoesContactEnabled || false;
 
-    if (syncResult.success) {
+    const zohoPayload = {
+      name: order.customerInfo?.name,
+      phone: order.customerInfo?.phone,
+      email: order.customerInfo?.email || "",
+      address: `${order.customerInfo?.address}, ${order.customerInfo?.city || 'Dubai'}`,
+      source: "WB",
+      orderTotal: order.total,
+      itemsCount: itemsCount,
+      orderNumber: order.orderNumber,
+      notes: order.customerInfo?.notes || "",
+      carpetContact: carpetContact,
+      shoesContact: shoesContact
+    };
+
+    const result = await sendToZohoFlow(zohoPayload);
+
+    if (result.success) {
       res.status(200).json({
         success: true,
-        message: 'Order resynced to Zoho successfully',
-        zohoDealId: order.zohoDealId,
+        message: 'Order resynced to Zoho Flow successfully',
+        zohoResponse: result.response,
       });
     } else {
       res.status(500).json({
         success: false,
-        message: 'Failed to sync to Zoho',
-        error: syncResult.error,
+        message: 'Failed to sync to Zoho Flow',
+        error: result.error,
       });
     }
   } catch (error) {
