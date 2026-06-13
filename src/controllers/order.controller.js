@@ -2,7 +2,36 @@ const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const zohoService = require('../services/zoho.service');
 const { v4: uuidv4 } = require('uuid');
-const whatsappService = require('../services/whatsapp.service'); // Import the AiSensy service
+const whatsappService = require('../services/whatsapp.service');
+
+// Zoho Webhook URL
+const ZOHO_WEBHOOK_URL = "https://flow.zoho.com/925120593/flow/webhook/incoming?zapikey=1001.a459dc2423c0615b04b76478d2f93b6a.aa50edf0a55826432e8724376b48564d&isdebug=false";
+
+// Function to send data to Zoho Webhook
+const sendToZohoWebhook = async (customerInfo, orderNumber) => {
+  const payload = {
+    full_name: customerInfo.name,
+    mobile: customerInfo.phone,
+    email: customerInfo.email || '',
+    address: customerInfo.address,
+    special_instructions: customerInfo.notes || '',
+  };
+
+  try {
+    console.log('📤 Sending to Zoho Webhook:', payload);
+    const response = await fetch(ZOHO_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    console.log(`✅ Zoho Webhook response status: ${response.status}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Zoho Webhook error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 // Generate order number
 const generateOrderNumber = () => {
@@ -44,7 +73,7 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Customer information is incomplete' });
     }
 
-    // Get carpet and shoes toggle preferences from localStorage (sent from frontend)
+    // Get carpet and shoes toggle preferences from frontend
     const carpetContactEnabled = req.body.carpetContactEnabled || false;
     const shoesContactEnabled = req.body.shoesContactEnabled || false;
 
@@ -79,6 +108,11 @@ exports.createOrder = async (req, res) => {
     console.log(`📊 Order total: AED ${order.total} (Subtotal: AED ${order.subtotal})`);
     console.log(`🪙 Carpet Contact Enabled: ${carpetContactEnabled ? 'YES' : 'NO'}`);
     console.log(`👟 Shoes Contact Enabled: ${shoesContactEnabled ? 'YES' : 'NO'}`);
+
+    // 🔥 SEND TO ZOHO WEBHOOK (fire and forget - don't await)
+    sendToZohoWebhook(customerInfo, orderNumber).catch(err =>
+      console.error('Background Zoho webhook failed:', err)
+    );
 
     // Sync to Zoho CRM
     try {
