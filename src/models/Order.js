@@ -32,32 +32,78 @@ const orderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    items: [orderItemSchema],
-    subtotal: { type: Number, required: true, default: 0 },
-    deliveryFee: { type: Number, default: 0 },
-    tax: { type: Number, default: 0 },
-    discount: { type: Number, default: 0 },
-    total: { type: Number, required: true, default: 0 },
+    items: {
+      type: [orderItemSchema],
+      required: true,
+      default: [],
+    },
+    subtotal: {
+      type: Number,
+      required: true,
+      default: 0
+    },
+    deliveryFee: {
+      type: Number,
+      default: 0
+    },
+    tax: {
+      type: Number,
+      default: 0
+    },
+    discount: {
+      type: Number,
+      default: 0
+    },
+    total: {
+      type: Number,
+      required: true,
+      default: 0
+    },
     status: {
       type: String,
       enum: ['pending', 'processing', 'completed', 'cancelled'],
       default: 'pending',
     },
     customerInfo: {
-      full_name: { type: String, required: true },
-      mobile: { type: String, required: true },
-      email: { type: String, default: '' },
-      address: { type: String, required: true },
-      city: { type: String, default: 'Dubai' },
-      special_instructions: { type: String, default: '' },
-      crmPreferences: {
-        carpetContactEnabled: { type: Boolean, default: false },
-        shoesContactEnabled: { type: Boolean, default: false },
+      full_name: {
+        type: String,
+        required: true
       },
+      mobile: {
+        type: String,
+        required: true
+      },
+      email: {
+        type: String,
+        default: ''
+      },
+      address: {
+        type: String,
+        required: true
+      },
+      city: {
+        type: String,
+        default: 'Dubai'
+      },
+      special_instructions: {
+        type: String,
+        default: ''
+      },
+    },
+    carpetContactEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    shoesContactEnabled: {
+      type: Boolean,
+      default: false,
     },
     zohoDealId: { type: String },
     zohoContactId: { type: String },
-    paymentMethod: { type: String, default: 'cash' },
+    paymentMethod: {
+      type: String,
+      default: 'cash'
+    },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed'],
@@ -66,5 +112,9 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Index for faster queries
+orderSchema.index({ orderNumber: 1 });
+orderSchema.index({ sessionId: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);

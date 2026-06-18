@@ -1,24 +1,21 @@
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
-const { v4: uuidv4 } = require('uuid');
 
 // Zoho Webhook URL
 const ZOHO_WEBHOOK_URL = "https://flow.zoho.com/925120593/flow/webhook/incoming?zapikey=1001.a459dc2423c0615b04b76478d2f93b6a.aa50edf0a55826432e8724376b48564d&isdebug=false";
 
 // Function to send data to Zoho Webhook
 const sendToZohoWebhook = async (customerInfo, orderNumber) => {
-  // Extract fields correctly - using full_name and mobile
   const payload = {
-    full_name: customerInfo.full_name || customerInfo.name || '',
-    mobile: customerInfo.mobile || customerInfo.phone || '',
+    full_name: customerInfo.full_name || '',
+    mobile: customerInfo.mobile || '',
     email: customerInfo.email || '',
     address: customerInfo.address || '',
-    special_instructions: customerInfo.special_instructions || customerInfo.notes || '',
+    special_instructions: customerInfo.special_instructions || '',
   };
 
   console.log('📤 Sending to Zoho Webhook:');
   console.log('📋 Payload:', JSON.stringify(payload, null, 2));
-  console.log(`🌐 Webhook URL: ${ZOHO_WEBHOOK_URL}`);
 
   try {
     const response = await fetch(ZOHO_WEBHOOK_URL, {
@@ -32,10 +29,10 @@ const sendToZohoWebhook = async (customerInfo, orderNumber) => {
 
     const responseText = await response.text();
     console.log(`📥 Zoho Webhook response status: ${response.status}`);
-    console.log(`📥 Zoho Webhook response body: ${responseText}`);
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${responseText}`);
+      console.error(`❌ Zoho Webhook error: ${responseText}`);
+      return { success: false, error: responseText };
     }
 
     return { success: true, response: responseText };
@@ -51,12 +48,16 @@ const generateOrderNumber = () => {
   const year = date.getFullYear().toString().slice(-2);
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
-  const random = Math.floor(Math.random() * 1000).toString().padStart(4, '0');
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   return `ORD-${year}${month}${day}-${random}`;
 };
 
 // Create order
 exports.createOrder = async (req, res) => {
+  console.log('========================================');
+  console.log('📨 POST /api/orders -', new Date().toISOString());
+  console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+
   try {
     const {
       sessionId,
@@ -67,14 +68,11 @@ exports.createOrder = async (req, res) => {
       discount = 0,
       total,
       customerInfo,
+      carpetContactEnabled = false,
+      shoesContactEnabled = false,
     } = req.body;
 
-    console.log('========================================');
-    console.log('📨 POST /api/orders -', new Date().toISOString());
-    console.log('📦 Creating order...');
-    console.log('📋 Received customerInfo:', JSON.stringify(customerInfo, null, 2));
-
-    // Validate required fields
+    // VALIDATION
     if (!sessionId) {
       return res.status(400).json({
         success: false,
@@ -89,82 +87,109 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Check for both field name formats
-    const customerName = customerInfo.full_name || customerInfo.name;
-    const customerPhone = customerInfo.mobile || customerInfo.phone;
-    const customerAddress = customerInfo.address;
-    const customerEmail = customerInfo.email || '';
-    const customerNotes = customerInfo.special_instructions || customerInfo.notes || '';
-
-    if (!customerName || !customerPhone || !customerAddress) {
-      console.error('❌ Missing customer info:', {
-        name: customerName,
-        phone: customerPhone,
-        address: customerAddress
-      });
+    if (!customerInfo) {
       return res.status(400).json({
         success: false,
-        message: 'Customer information is incomplete (name, phone, address required)'
+        message: 'Customer information is required'
       });
     }
 
-    // Get carpet and shoes toggle preferences
-    const carpetContactEnabled = req.body.carpetContactEnabled || false;
-    const shoesContactEnabled = req.body.shoesContactEnabled || false;
+    // Check for required fields in customerInfo
+    const customerName = customerInfo.full_name || customerInfo.name;
+    const customerPhone = customerInfo.mobile || customerInfo.phone;
+    const customerAddress = customerInfo.address;
+
+    if (!customerName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer full_name is required'
+      });
+    }
+
+    if (!customerPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer mobile is required'
+      });
+    }
+
+    if (!customerAddress) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer address is required'
+      });
+    }
 
     // Create order number
     const orderNumber = generateOrderNumber();
 
-    // Create order object with proper field names
+    // Build customer info with correct field names
+    const customerInfoData = {
+      full_name: customerName,
+      mobile: customerPhone,
+      email: customerInfo.email || '',
+      address: customerAddress,
+      city: customerInfo.city || 'Dubai',
+      special_instructions: customerInfo.special_instructions || customerInfo.notes || '',
+    };
+
+    // Create order object
     const orderData = {
       orderNumber,
       sessionId,
-      items,
-      subtotal: subtotal || total,
+      items: items.map(item => ({
+        productId: item.productId || item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity || 1,
+        image: item.image || '',
+        category: item.category || '',
+        serviceItems: item.serviceItems || [],
+        selectedColor: item.selectedColor || null,
+        selectedSize: item.selectedSize || null,
+        designImage: item.designImage || null,
+        serviceName: item.serviceName || '',
+        metadata: item.metadata || {},
+      })),
+      subtotal: subtotal || total || 0,
       deliveryFee,
       tax,
       discount,
-      total: total || subtotal,
+      total: total || subtotal || 0,
+      customerInfo: customerInfoData,
+      carpetContactEnabled,
+      shoesContactEnabled,
       status: 'pending',
-      customerInfo: {
-        full_name: customerName,
-        mobile: customerPhone,
-        email: customerEmail,
-        address: customerAddress,
-        special_instructions: customerNotes,
-        city: customerInfo.city || 'Dubai',
-        crmPreferences: {
-          carpetContactEnabled,
-          shoesContactEnabled,
-        },
-      },
     };
+
+    console.log('📦 Creating order with data:');
+    console.log('📋 Order Number:', orderNumber);
+    console.log('👤 Customer:', customerInfoData.full_name);
+    console.log('📞 Phone:', customerInfoData.mobile);
+    console.log('💰 Total:', orderData.total);
 
     // Save to database
     const order = new Order(orderData);
     await order.save();
 
-    console.log(`✅ Order created: ${orderNumber}`);
-    console.log(`📊 Order total: AED ${order.total} (Subtotal: AED ${order.subtotal})`);
-    console.log(`🪙 Carpet Contact Enabled: ${carpetContactEnabled ? 'YES' : 'NO'}`);
-    console.log(`👟 Shoes Contact Enabled: ${shoesContactEnabled ? 'YES' : 'NO'}`);
+    console.log(`✅ Order created successfully: ${orderNumber}`);
 
-    // SEND TO ZOHO WEBHOOK
+    // SEND TO ZOHO WEBHOOK (fire and forget)
     console.log('🚀 Sending to Zoho webhook...');
-    const webhookResult = await sendToZohoWebhook(customerInfo, orderNumber);
+    sendToZohoWebhook(customerInfoData, orderNumber).then(result => {
+      if (result.success) {
+        console.log('✅ Zoho webhook sent successfully');
+      } else {
+        console.error('❌ Zoho webhook failed:', result.error);
+      }
+    });
 
-    if (webhookResult.success) {
-      console.log('✅ Zoho webhook sent successfully');
-    } else {
-      console.error('❌ Zoho webhook failed:', webhookResult.error);
-    }
-
-    // Clear the cart after successful order
+    // Clear the cart
     try {
       await Cart.findOneAndDelete({ sessionId });
       console.log(`🗑️ Cart cleared for session: ${sessionId}`);
     } catch (cartError) {
-      console.error('Failed to clear cart:', cartError.message);
+      console.error('⚠️ Failed to clear cart:', cartError.message);
     }
 
     console.log('========================================');
@@ -180,13 +205,22 @@ exports.createOrder = async (req, res) => {
         status: order.status,
         createdAt: order.createdAt,
       },
-      webhookSent: webhookResult.success,
-      whatsappLink: `https://wa.me/${customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
     });
 
   } catch (error) {
     console.error('❌ Create order error:', error);
     console.log('========================================');
+
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to create order',
@@ -271,5 +305,5 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// Track order (alias)
+// Track order
 exports.trackOrder = exports.getOrderByNumber;
