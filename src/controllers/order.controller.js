@@ -56,7 +56,7 @@ const generateOrderNumber = () => {
 exports.createOrder = async (req, res) => {
   console.log('========================================');
   console.log('📨 POST /api/orders -', new Date().toISOString());
-  console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('📋 Request body received:', JSON.stringify(req.body, null, 2));
 
   try {
     const {
@@ -72,8 +72,8 @@ exports.createOrder = async (req, res) => {
       shoesContactEnabled = false,
     } = req.body;
 
-    // VALIDATION
-    if (!sessionId) {
+    // VALIDATION - Session ID
+    if (!sessionId || sessionId.trim() === '') {
       console.error('❌ Missing sessionId');
       return res.status(400).json({
         success: false,
@@ -82,6 +82,7 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    // VALIDATION - Items
     if (!items || items.length === 0) {
       console.error('❌ No items in order');
       return res.status(400).json({
@@ -91,6 +92,7 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    // VALIDATION - Customer Info
     if (!customerInfo) {
       console.error('❌ Missing customerInfo');
       return res.status(400).json({
@@ -100,22 +102,36 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Check for required fields in customerInfo
-    const customerName = customerInfo.full_name || customerInfo.name;
-    const customerPhone = customerInfo.mobile || customerInfo.phone;
-    const customerAddress = customerInfo.address;
+    // Extract customer info with proper field names
+    // Support both full_name and name formats
+    const customerName = customerInfo.full_name || customerInfo.name || '';
+    const customerPhone = customerInfo.mobile || customerInfo.phone || '';
+    const customerAddress = customerInfo.address || '';
+    const customerEmail = customerInfo.email || '';
+    const customerCity = customerInfo.city || 'Dubai';
+    const customerNotes = customerInfo.special_instructions || customerInfo.notes || '';
 
+    console.log('📋 Extracted customer data:', {
+      full_name: customerName,
+      mobile: customerPhone,
+      address: customerAddress,
+      email: customerEmail,
+      city: customerCity,
+      special_instructions: customerNotes
+    });
+
+    // VALIDATION - Check required fields
     const validationErrors = [];
 
-    if (!customerName) {
-      validationErrors.push('Customer full_name is required');
+    if (!customerName || customerName.trim().length < 2) {
+      validationErrors.push('Customer name is required (minimum 2 characters)');
     }
 
-    if (!customerPhone) {
-      validationErrors.push('Customer mobile is required');
+    if (!customerPhone || customerPhone.trim().length < 5) {
+      validationErrors.push('Customer phone number is required');
     }
 
-    if (!customerAddress) {
+    if (!customerAddress || customerAddress.trim().length < 3) {
       validationErrors.push('Customer address is required');
     }
 
@@ -131,17 +147,17 @@ exports.createOrder = async (req, res) => {
     // Create order number
     const orderNumber = generateOrderNumber();
 
-    // Build customer info with correct field names
+    // Build customer info with clean data
     const customerInfoData = {
       full_name: customerName.trim(),
       mobile: customerPhone.trim(),
-      email: (customerInfo.email || '').trim(),
+      email: customerEmail.trim(),
       address: customerAddress.trim(),
-      city: (customerInfo.city || 'Dubai').trim(),
-      special_instructions: (customerInfo.special_instructions || customerInfo.notes || '').trim(),
+      city: customerCity.trim(),
+      special_instructions: customerNotes.trim(),
     };
 
-    // Validate items
+    // Validate and clean items
     const validatedItems = items.map(item => ({
       productId: item.productId || item.id || 'unknown',
       name: item.name || 'Unknown Item',
@@ -166,11 +182,11 @@ exports.createOrder = async (req, res) => {
       orderNumber,
       sessionId: sessionId.trim(),
       items: validatedItems,
-      subtotal: subtotal || calculatedSubtotal,
+      subtotal: typeof subtotal === 'number' ? subtotal : calculatedSubtotal,
       deliveryFee: typeof deliveryFee === 'number' ? deliveryFee : 0,
       tax: typeof tax === 'number' ? tax : 0,
       discount: typeof discount === 'number' ? discount : 0,
-      total: total || calculatedTotal,
+      total: typeof total === 'number' ? total : calculatedTotal,
       customerInfo: customerInfoData,
       carpetContactEnabled: Boolean(carpetContactEnabled),
       shoesContactEnabled: Boolean(shoesContactEnabled),
@@ -181,6 +197,7 @@ exports.createOrder = async (req, res) => {
     console.log('📋 Order Number:', orderNumber);
     console.log('👤 Customer:', customerInfoData.full_name);
     console.log('📞 Phone:', customerInfoData.mobile);
+    console.log('📍 Address:', customerInfoData.address);
     console.log('💰 Subtotal:', orderData.subtotal);
     console.log('💰 Total:', orderData.total);
     console.log('🪙 Carpet Contact:', orderData.carpetContactEnabled);
@@ -231,7 +248,8 @@ exports.createOrder = async (req, res) => {
 
     // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);      return res.status(400).json({
+      const errors = Object.values(error.errors).map((err: any) => err.message);
+      return res.status(400).json({
         success: false,
         message: 'Validation failed',
         errors: errors,
