@@ -74,23 +74,29 @@ exports.createOrder = async (req, res) => {
 
     // VALIDATION
     if (!sessionId) {
+      console.error('❌ Missing sessionId');
       return res.status(400).json({
         success: false,
-        message: 'Session ID is required'
+        message: 'Session ID is required',
+        errors: ['Session ID is required']
       });
     }
 
     if (!items || items.length === 0) {
+      console.error('❌ No items in order');
       return res.status(400).json({
         success: false,
-        message: 'No items in order'
+        message: 'No items in order',
+        errors: ['No items in order']
       });
     }
 
     if (!customerInfo) {
+      console.error('❌ Missing customerInfo');
       return res.status(400).json({
         success: false,
-        message: 'Customer information is required'
+        message: 'Customer information is required',
+        errors: ['Customer information is required']
       });
     }
 
@@ -99,24 +105,26 @@ exports.createOrder = async (req, res) => {
     const customerPhone = customerInfo.mobile || customerInfo.phone;
     const customerAddress = customerInfo.address;
 
+    const validationErrors = [];
+
     if (!customerName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer full_name is required'
-      });
+      validationErrors.push('Customer full_name is required');
     }
 
     if (!customerPhone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer mobile is required'
-      });
+      validationErrors.push('Customer mobile is required');
     }
 
     if (!customerAddress) {
+      validationErrors.push('Customer address is required');
+    }
+
+    if (validationErrors.length > 0) {
+      console.error('❌ Validation errors:', validationErrors);
       return res.status(400).json({
         success: false,
-        message: 'Customer address is required'
+        message: 'Validation failed',
+        errors: validationErrors
       });
     }
 
@@ -125,40 +133,47 @@ exports.createOrder = async (req, res) => {
 
     // Build customer info with correct field names
     const customerInfoData = {
-      full_name: customerName,
-      mobile: customerPhone,
-      email: customerInfo.email || '',
-      address: customerAddress,
-      city: customerInfo.city || 'Dubai',
-      special_instructions: customerInfo.special_instructions || customerInfo.notes || '',
+      full_name: customerName.trim(),
+      mobile: customerPhone.trim(),
+      email: (customerInfo.email || '').trim(),
+      address: customerAddress.trim(),
+      city: (customerInfo.city || 'Dubai').trim(),
+      special_instructions: (customerInfo.special_instructions || customerInfo.notes || '').trim(),
     };
+
+    // Validate items
+    const validatedItems = items.map(item => ({
+      productId: item.productId || item.id || 'unknown',
+      name: item.name || 'Unknown Item',
+      price: typeof item.price === 'number' ? item.price : 0,
+      quantity: typeof item.quantity === 'number' && item.quantity > 0 ? item.quantity : 1,
+      image: item.image || '',
+      category: item.category || '',
+      serviceItems: Array.isArray(item.serviceItems) ? item.serviceItems : [],
+      selectedColor: item.selectedColor || null,
+      selectedSize: item.selectedSize || null,
+      designImage: item.designImage || null,
+      serviceName: item.serviceName || '',
+      metadata: item.metadata || {},
+    }));
+
+    // Calculate totals
+    const calculatedSubtotal = validatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const calculatedTotal = calculatedSubtotal + deliveryFee + tax - discount;
 
     // Create order object
     const orderData = {
       orderNumber,
-      sessionId,
-      items: items.map(item => ({
-        productId: item.productId || item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity || 1,
-        image: item.image || '',
-        category: item.category || '',
-        serviceItems: item.serviceItems || [],
-        selectedColor: item.selectedColor || null,
-        selectedSize: item.selectedSize || null,
-        designImage: item.designImage || null,
-        serviceName: item.serviceName || '',
-        metadata: item.metadata || {},
-      })),
-      subtotal: subtotal || total || 0,
-      deliveryFee,
-      tax,
-      discount,
-      total: total || subtotal || 0,
+      sessionId: sessionId.trim(),
+      items: validatedItems,
+      subtotal: subtotal || calculatedSubtotal,
+      deliveryFee: typeof deliveryFee === 'number' ? deliveryFee : 0,
+      tax: typeof tax === 'number' ? tax : 0,
+      discount: typeof discount === 'number' ? discount : 0,
+      total: total || calculatedTotal,
       customerInfo: customerInfoData,
-      carpetContactEnabled,
-      shoesContactEnabled,
+      carpetContactEnabled: Boolean(carpetContactEnabled),
+      shoesContactEnabled: Boolean(shoesContactEnabled),
       status: 'pending',
     };
 
@@ -166,7 +181,10 @@ exports.createOrder = async (req, res) => {
     console.log('📋 Order Number:', orderNumber);
     console.log('👤 Customer:', customerInfoData.full_name);
     console.log('📞 Phone:', customerInfoData.mobile);
+    console.log('💰 Subtotal:', orderData.subtotal);
     console.log('💰 Total:', orderData.total);
+    console.log('🪙 Carpet Contact:', orderData.carpetContactEnabled);
+    console.log('👟 Shoes Contact:', orderData.shoesContactEnabled);
 
     // Save to database
     const order = new Order(orderData);
@@ -195,7 +213,7 @@ exports.createOrder = async (req, res) => {
     console.log('========================================');
 
     // Return response
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Order created successfully',
       order: {
@@ -211,9 +229,9 @@ exports.createOrder = async (req, res) => {
     console.error('❌ Create order error:', error);
     console.log('========================================');
 
-    // Handle validation errors
+    // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
+      const errors = Object.values(error.errors).map((err: any) => err.message);
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -221,9 +239,19 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    res.status(500).json({
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Order with this number already exists',
+        errors: ['Duplicate order number'],
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       message: error.message || 'Failed to create order',
+      errors: [error.message || 'Internal server error'],
     });
   }
 };
@@ -241,13 +269,13 @@ exports.getOrderByNumber = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       order,
     });
   } catch (error) {
     console.error('Get order error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message
     });
@@ -260,13 +288,13 @@ exports.getOrdersBySession = async (req, res) => {
     const { sessionId } = req.params;
     const orders = await Order.find({ sessionId }).sort({ createdAt: -1 });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       orders,
     });
   } catch (error) {
     console.error('Get orders error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message
     });
@@ -291,14 +319,14 @@ exports.updateOrderStatus = async (req, res) => {
     order.status = status;
     await order.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Order status updated',
       order,
     });
   } catch (error) {
     console.error('Update order status error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message
     });
