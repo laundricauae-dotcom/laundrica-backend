@@ -231,8 +231,7 @@ exports.createOrder = async (req, res) => {
 
     // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
-      return res.status(400).json({
+      const errors = Object.values(error.errors).map(err => err.message);      return res.status(400).json({
         success: false,
         message: 'Validation failed',
         errors: errors,
