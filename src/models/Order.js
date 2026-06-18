@@ -1,4 +1,3 @@
-// /src/models/Order.js
 const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
@@ -17,6 +16,7 @@ const orderItemSchema = new mongoose.Schema({
   selectedColor: { type: String },
   selectedSize: { type: String },
   designImage: { type: String },
+  serviceName: { type: String },
   metadata: { type: mongoose.Schema.Types.Mixed },
 });
 
@@ -44,13 +44,12 @@ const orderSchema = new mongoose.Schema(
       default: 'pending',
     },
     customerInfo: {
-      name: { type: String, required: true },
-      phone: { type: String, required: true },
+      full_name: { type: String, required: true },
+      mobile: { type: String, required: true },
       email: { type: String, default: '' },
       address: { type: String, required: true },
       city: { type: String, default: 'Dubai' },
-      notes: { type: String, default: '' },
-      // ADD CRM PREFERENCES
+      special_instructions: { type: String, default: '' },
       crmPreferences: {
         carpetContactEnabled: { type: Boolean, default: false },
         shoesContactEnabled: { type: Boolean, default: false },

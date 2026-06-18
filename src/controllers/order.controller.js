@@ -1,32 +1,44 @@
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
-const zohoService = require('../services/zoho.service');
 const { v4: uuidv4 } = require('uuid');
-const whatsappService = require('../services/whatsapp.service');
 
 // Zoho Webhook URL
 const ZOHO_WEBHOOK_URL = "https://flow.zoho.com/925120593/flow/webhook/incoming?zapikey=1001.a459dc2423c0615b04b76478d2f93b6a.aa50edf0a55826432e8724376b48564d&isdebug=false";
 
 // Function to send data to Zoho Webhook
 const sendToZohoWebhook = async (customerInfo, orderNumber) => {
+  // Extract fields correctly - using full_name and mobile
   const payload = {
-    full_name: customerInfo.name,
-    mobile: customerInfo.phone,
+    full_name: customerInfo.full_name || customerInfo.name || '',
+    mobile: customerInfo.mobile || customerInfo.phone || '',
     email: customerInfo.email || '',
-    address: customerInfo.address,
-    special_instructions: customerInfo.notes || '',
+    address: customerInfo.address || '',
+    special_instructions: customerInfo.special_instructions || customerInfo.notes || '',
   };
 
+  console.log('📤 Sending to Zoho Webhook:');
+  console.log('📋 Payload:', JSON.stringify(payload, null, 2));
+  console.log(`🌐 Webhook URL: ${ZOHO_WEBHOOK_URL}`);
+
   try {
-    console.log('📤 Sending to Zoho Webhook:', payload);
     const response = await fetch(ZOHO_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify(payload),
     });
 
-    console.log(`✅ Zoho Webhook response status: ${response.status}`);
-    return { success: true };
+    const responseText = await response.text();
+    console.log(`📥 Zoho Webhook response status: ${response.status}`);
+    console.log(`📥 Zoho Webhook response body: ${responseText}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${responseText}`);
+    }
+
+    return { success: true, response: responseText };
   } catch (error) {
     console.error('❌ Zoho Webhook error:', error);
     return { success: false, error: error.message };
@@ -57,30 +69,53 @@ exports.createOrder = async (req, res) => {
       customerInfo,
     } = req.body;
 
+    console.log('========================================');
     console.log('📨 POST /api/orders -', new Date().toISOString());
     console.log('📦 Creating order...');
+    console.log('📋 Received customerInfo:', JSON.stringify(customerInfo, null, 2));
 
     // Validate required fields
     if (!sessionId) {
-      return res.status(400).json({ success: false, message: 'Session ID is required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
     }
 
     if (!items || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'No items in order' });
+      return res.status(400).json({
+        success: false,
+        message: 'No items in order'
+      });
     }
 
-    if (!customerInfo || !customerInfo.name || !customerInfo.phone || !customerInfo.address) {
-      return res.status(400).json({ success: false, message: 'Customer information is incomplete' });
+    // Check for both field name formats
+    const customerName = customerInfo.full_name || customerInfo.name;
+    const customerPhone = customerInfo.mobile || customerInfo.phone;
+    const customerAddress = customerInfo.address;
+    const customerEmail = customerInfo.email || '';
+    const customerNotes = customerInfo.special_instructions || customerInfo.notes || '';
+
+    if (!customerName || !customerPhone || !customerAddress) {
+      console.error('❌ Missing customer info:', {
+        name: customerName,
+        phone: customerPhone,
+        address: customerAddress
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Customer information is incomplete (name, phone, address required)'
+      });
     }
 
-    // Get carpet and shoes toggle preferences from frontend
+    // Get carpet and shoes toggle preferences
     const carpetContactEnabled = req.body.carpetContactEnabled || false;
     const shoesContactEnabled = req.body.shoesContactEnabled || false;
 
     // Create order number
     const orderNumber = generateOrderNumber();
 
-    // Create order object
+    // Create order object with proper field names
     const orderData = {
       orderNumber,
       sessionId,
@@ -92,7 +127,12 @@ exports.createOrder = async (req, res) => {
       total: total || subtotal,
       status: 'pending',
       customerInfo: {
-        ...customerInfo,
+        full_name: customerName,
+        mobile: customerPhone,
+        email: customerEmail,
+        address: customerAddress,
+        special_instructions: customerNotes,
+        city: customerInfo.city || 'Dubai',
         crmPreferences: {
           carpetContactEnabled,
           shoesContactEnabled,
@@ -109,36 +149,14 @@ exports.createOrder = async (req, res) => {
     console.log(`🪙 Carpet Contact Enabled: ${carpetContactEnabled ? 'YES' : 'NO'}`);
     console.log(`👟 Shoes Contact Enabled: ${shoesContactEnabled ? 'YES' : 'NO'}`);
 
-    // 🔥 SEND TO ZOHO WEBHOOK (fire and forget - don't await)
-    sendToZohoWebhook(customerInfo, orderNumber).catch(err =>
-      console.error('Background Zoho webhook failed:', err)
-    );
+    // SEND TO ZOHO WEBHOOK
+    console.log('🚀 Sending to Zoho webhook...');
+    const webhookResult = await sendToZohoWebhook(customerInfo, orderNumber);
 
-    // Sync to Zoho CRM
-    try {
-      console.log(`🔄 Syncing order ${orderNumber} to Zoho CRM...`);
-      const syncResult = await zohoService.syncOrderToZoho(order);
-      if (syncResult.success) {
-        console.log(`✅ Order ${orderNumber} synced to Zoho CRM`);
-      } else {
-        console.error(`❌ Failed to sync order ${orderNumber} to Zoho:`, syncResult.error);
-      }
-    } catch (zohoError) {
-      console.error('❌ Zoho sync error:', zohoError.message);
-    }
-
-    // Send WhatsApp message using AiSensy service
-    let whatsappResult = null;
-    try {
-      console.log(`📱 Sending WhatsApp confirmation to ${customerInfo.phone}...`);
-      whatsappResult = await whatsappService.sendOrderConfirmation(order, customerInfo.phone);
-      if (whatsappResult.success) {
-        console.log(`✅ WhatsApp sent successfully${whatsappResult.simulated ? ' (simulated mode)' : ''}`);
-      } else {
-        console.error(`❌ WhatsApp failed: ${whatsappResult.error}`);
-      }
-    } catch (whatsappError) {
-      console.error('❌ WhatsApp error:', whatsappError.message);
+    if (webhookResult.success) {
+      console.log('✅ Zoho webhook sent successfully');
+    } else {
+      console.error('❌ Zoho webhook failed:', webhookResult.error);
     }
 
     // Clear the cart after successful order
@@ -148,6 +166,8 @@ exports.createOrder = async (req, res) => {
     } catch (cartError) {
       console.error('Failed to clear cart:', cartError.message);
     }
+
+    console.log('========================================');
 
     // Return response
     res.status(201).json({
@@ -160,12 +180,13 @@ exports.createOrder = async (req, res) => {
         status: order.status,
         createdAt: order.createdAt,
       },
-      whatsappLink: `https://wa.me/${customerInfo.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
-      whatsappSent: whatsappResult?.success || false,
+      webhookSent: webhookResult.success,
+      whatsappLink: `https://wa.me/${customerPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello, I've placed order #${orderNumber}. Please confirm.`)}`,
     });
 
   } catch (error) {
     console.error('❌ Create order error:', error);
+    console.log('========================================');
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to create order',
@@ -173,15 +194,17 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// Get order by number (track order)
+// Get order by number
 exports.getOrderByNumber = async (req, res) => {
   try {
     const { orderNumber } = req.params;
-
     const order = await Order.findOne({ orderNumber });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
     }
 
     res.status(200).json({
@@ -190,7 +213,10 @@ exports.getOrderByNumber = async (req, res) => {
     });
   } catch (error) {
     console.error('Get order error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -198,7 +224,6 @@ exports.getOrderByNumber = async (req, res) => {
 exports.getOrdersBySession = async (req, res) => {
   try {
     const { sessionId } = req.params;
-
     const orders = await Order.find({ sessionId }).sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -207,7 +232,10 @@ exports.getOrdersBySession = async (req, res) => {
     });
   } catch (error) {
     console.error('Get orders error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -220,20 +248,14 @@ exports.updateOrderStatus = async (req, res) => {
     const order = await Order.findOne({ orderNumber });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
     }
 
     order.status = status;
     await order.save();
-
-    // Update in Zoho CRM if deal ID exists
-    if (order.zohoDealId) {
-      try {
-        await zohoService.updateDealStatus(orderNumber, status, order.zohoDealId);
-      } catch (zohoError) {
-        console.error('Failed to update Zoho deal status:', zohoError.message);
-      }
-    }
 
     res.status(200).json({
       success: true,
@@ -242,41 +264,12 @@ exports.updateOrderStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Update order status error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
-// Track order (alias for getOrderByNumber)
+// Track order (alias)
 exports.trackOrder = exports.getOrderByNumber;
-
-// Resync order to Zoho
-exports.resyncToZoho = async (req, res) => {
-  try {
-    const { orderNumber } = req.params;
-
-    const order = await Order.findOne({ orderNumber });
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    const syncResult = await zohoService.syncOrderToZoho(order);
-
-    if (syncResult.success) {
-      res.status(200).json({
-        success: true,
-        message: 'Order resynced to Zoho successfully',
-        zohoDealId: order.zohoDealId,
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to sync to Zoho',
-        error: syncResult.error,
-      });
-    }
-  } catch (error) {
-    console.error('Resync to Zoho error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};

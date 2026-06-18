@@ -3,43 +3,32 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
 const compression = require('compression');
+const cors = require('cors');
 
 // Load env
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Import middlewares
-const {
-  logger,
-  rateLimit,
-  errorHandler,
-  corsMiddleware,
-  securityHeaders,
-  sanitize,
-  cacheMiddleware,
-} = require('./middleware');
-
 const app = express();
 
 // ========== GLOBAL MIDDLEWARES ==========
-app.use(corsMiddleware);
-app.use(securityHeaders);
+app.use(cors({
+  origin: '*',
+  credentials: true,
+}));
 
 app.use(compression({
   level: 6,
   threshold: 1024,
-  filter: (req, res) => {
-    if (req.path && req.path.startsWith('/api/')) {
-      return false;
-    }
-    return true;
-  }
 }));
 
-app.use(logger);
-app.use(sanitize);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(rateLimit(15 * 60 * 1000, 100));
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`📝 ${req.method} ${req.url}`);
+  next();
+});
 
 // Routes
 const orderRoutes = require('./routes/order.routes');
@@ -49,11 +38,11 @@ const serviceRoutes = require('./routes/service.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const contactRoutes = require('./routes/contact.routes');
 
-// IMPORTANT: Register all routes
-app.use('/api/products', cacheMiddleware(300), productRoutes);
-app.use('/api/services', cacheMiddleware(300), serviceRoutes);
-app.use('/api/orders', orderRoutes);  // This includes your updated order controller
+// Register routes
+app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/services', serviceRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/webhook', webhookRoutes);
 
@@ -75,11 +64,17 @@ app.use((req, res) => {
 });
 
 // Global error handler
-app.use(errorHandler);
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err);
+  res.status(500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+  });
+});
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/laundrica')
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch((err) => console.error('❌ MongoDB connection error:', err));
 
@@ -90,11 +85,10 @@ app.listen(PORT, () => {
   console.log(`📦 API endpoints:`);
   console.log(`   - POST   /api/orders - Create order (with Zoho Flow)`);
   console.log(`   - GET    /api/orders/track/:id - Track order`);
-  console.log(`   - POST   /api/orders/:orderNumber/resync - Resync to Zoho`);
-  console.log(`   - GET    /api/products - Get products`);
-  console.log(`   - GET    /api/services - Get services`);
-  console.log(`   - GET    /api/cart/:sessionId - Get cart`);
-  console.log(`   - POST   /api/cart/:sessionId/add - Add to cart`);
+  console.log(`   - GET    /api/orders/session/:sessionId - Get orders by session`);
+  console.log(`   - PATCH  /api/orders/:orderNumber/status - Update order status`);
+  console.log(`   - POST   /webhook/zoho/order-update - Zoho webhook endpoint`);
+  console.log(`   - GET    /webhook/zoho/health - Zoho webhook health check`);
 });
 
 module.exports = app;
