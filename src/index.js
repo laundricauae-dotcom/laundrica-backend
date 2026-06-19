@@ -12,39 +12,25 @@ const app = express();
 /* ===========================
    CORS
 =========================== */
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow Postman, mobile apps, server-side requests
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error(`CORS blocked: ${origin}`));
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
-      'X-Session-Id',
       'Accept',
+      'X-Session-Id',
     ],
   })
 );
 
-app.options('*', cors());
-
 /* ===========================
    MIDDLEWARE
 =========================== */
+
 app.use(
   compression({
     level: 6,
@@ -56,16 +42,18 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 /* ===========================
-   REQUEST LOGGER
+   LOGGER
 =========================== */
+
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  console.log(`📝 ${req.method} ${req.originalUrl}`);
   next();
 });
 
 /* ===========================
    ROUTES
 =========================== */
+
 const orderRoutes = require('./routes/order.routes');
 const cartRoutes = require('./routes/cart.routes');
 const productRoutes = require('./routes/product.routes');
@@ -83,10 +71,11 @@ app.use('/webhook', webhookRoutes);
 /* ===========================
    HEALTH CHECK
 =========================== */
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Server running successfully',
+    message: 'Server is running 🚀',
     mongodb:
       mongoose.connection.readyState === 1
         ? 'connected'
@@ -96,8 +85,9 @@ app.get('/api/health', (req, res) => {
 });
 
 /* ===========================
-   ROOT ROUTE
+   ROOT
 =========================== */
+
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -106,9 +96,10 @@ app.get('/', (req, res) => {
 });
 
 /* ===========================
-   404
+   404 HANDLER
 =========================== */
-app.use('*', (req, res) => {
+
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`,
@@ -118,35 +109,34 @@ app.use('*', (req, res) => {
 /* ===========================
    ERROR HANDLER
 =========================== */
+
 app.use((err, req, res, next) => {
-  console.error('❌ Server Error:', err);
+  console.error('❌ Error:', err);
 
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message: err.message || 'Internal server error',
   });
 });
 
 /* ===========================
-   DATABASE
+   DATABASE + SERVER START
 =========================== */
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
-    console.log('✅ MongoDB Connected');
+    console.log('✅ Connected to MongoDB');
 
     const PORT = process.env.PORT || 5000;
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(
-        `🌐 Health Check: http://localhost:${PORT}/api/health`
-      );
+      console.log(`🌐 Health: /api/health`);
     });
   })
   .catch((err) => {
-    console.error('❌ MongoDB Connection Failed');
-    console.error(err);
+    console.error('❌ MongoDB connection error:', err);
     process.exit(1);
   });
 
