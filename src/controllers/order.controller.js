@@ -5,41 +5,54 @@ const Cart = require('../models/Cart');
 const ZOHO_WEBHOOK_URL = "https://flow.zoho.com/925120593/flow/webhook/incoming?zapikey=1001.a459dc2423c0615b04b76478d2f93b6a.aa50edf0a55826432e8724376b48564d&isdebug=false";
 
 // Function to send data to Zoho Webhook
-const sendToZohoWebhook = async (customerInfo, orderNumber) => {
+const sendToZohoWebhook = async (order) => {
   const payload = {
-    full_name: customerInfo.full_name || '',
-    mobile: customerInfo.mobile || '',
-    email: customerInfo.email || '',
-    address: customerInfo.address || '',
-    special_instructions: customerInfo.special_instructions || '',
+    orderNumber: order.orderNumber,
+    sessionId: order.sessionId,
+
+    full_name: order.customerInfo.full_name,
+    mobile: order.customerInfo.mobile,
+    email: order.customerInfo.email,
+    address: order.customerInfo.address,
+    city: order.customerInfo.city,
+    special_instructions: order.customerInfo.special_instructions,
+
+    subtotal: order.subtotal,
+    deliveryFee: order.deliveryFee,
+    tax: order.tax,
+    discount: order.discount,
+    total: order.total,
+
+    carpetContactEnabled: order.carpetContactEnabled,
+    shoesContactEnabled: order.shoesContactEnabled,
+
+    items: order.items.map(item => ({
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      serviceName: item.serviceName,
+    })),
   };
 
   console.log('📤 Sending to Zoho Webhook:');
-  console.log('📋 Payload:', JSON.stringify(payload, null, 2));
+  console.log(JSON.stringify(payload, null, 2));
 
-  try {
-    const response = await fetch(ZOHO_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(payload),
-    });
+  const response = await fetch(ZOHO_WEBHOOK_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-    const responseText = await response.text();
-    console.log(`📥 Zoho Webhook response status: ${response.status}`);
+  const responseText = await response.text();
 
-    if (!response.ok) {
-      console.error(`❌ Zoho Webhook error: ${responseText}`);
-      return { success: false, error: responseText };
-    }
-
-    return { success: true, response: responseText };
-  } catch (error) {
-    console.error('❌ Zoho Webhook error:', error);
-    return { success: false, error: error.message };
-  }
+  return {
+    success: response.ok,
+    response: responseText,
+  };
 };
 
 // Generate order number
@@ -211,7 +224,7 @@ exports.createOrder = async (req, res) => {
 
     // SEND TO ZOHO WEBHOOK (fire and forget)
     console.log('🚀 Sending to Zoho webhook...');
-    sendToZohoWebhook(customerInfoData, orderNumber).then(result => {
+    sendToZohoWebhook(order).then(result => {
       if (result.success) {
         console.log('✅ Zoho webhook sent successfully');
       } else {
