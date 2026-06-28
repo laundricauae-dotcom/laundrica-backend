@@ -1,70 +1,60 @@
-const Product = require('../models/Product');  // This is your Service model
-const ServiceItem = require('../models/ServiceItem');
+// controllers/service.controller.js
+const serviceService = require('../services/service.service');
+const logger = require('../utils/logger');
 
-exports.getAllServices = async (req, res) => {
+exports.getAllServices = async (req, res, next) => {
   try {
-    // Use Product.find() since Product is your Service model
-    const services = await Product.find({ isActive: true }).sort('sortOrder');
-
-    console.log(`Found ${services.length} services`);
+    const services = await serviceService.getAllServices();
 
     res.status(200).json({
       success: true,
-      services: services,
-      count: services.length
+      services,
+      count: services.length,
     });
   } catch (error) {
-    console.error('Get services error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-exports.getServiceById = async (req, res) => {
+exports.getServiceById = async (req, res, next) => {
   try {
-    const service = await Product.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ success: false, message: 'Service not found' });
-    }
+    const { id } = req.params;
+    const result = await serviceService.getServiceById(id);
 
-    const items = await ServiceItem.find({ serviceId: service._id, isActive: true })
-      .sort('sortOrder');
-
-    res.status(200).json({ success: true, service, items });
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error) {
-    console.error('Get service by ID error:', error);
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-exports.getServicesByCategory = async (req, res) => {
+exports.getServicesByCategory = async (req, res, next) => {
   try {
     const { category } = req.params;
-    const services = await Product.find({
-      category: category,
-      isActive: true
-    }).sort('sortOrder');
-
-    res.status(200).json({ success: true, services });
-  } catch (error) {
-    console.error('Get services by category error:', error);
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-exports.getServiceItems = async (req, res) => {
-  try {
-    const { serviceId } = req.params;
-
-    const items = await ServiceItem.find({ serviceId: serviceId, isActive: true })
-      .sort('sortOrder');
+    const services = await serviceService.getServicesByCategory(category);
 
     res.status(200).json({
       success: true,
-      items: items,
-      count: items.length
+      services,
     });
   } catch (error) {
-    console.error('Get service items error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    next(error);
+  }
+};
+
+exports.getServiceItems = async (req, res, next) => {
+  try {
+    const { serviceId } = req.params;
+    const items = await serviceService.getServiceItems(serviceId);
+
+    res.status(200).json({
+      success: true,
+      items,
+      count: items.length,
+    });
+  } catch (error) {
+    next(error);
   }
 };

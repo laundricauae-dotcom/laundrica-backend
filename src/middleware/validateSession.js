@@ -1,27 +1,39 @@
-/**
- * Session validation middleware
- * Ensures valid session ID for cart operations
- */
+// middleware/validateSession.js
+
+const logger = require("../utils/logger");
+
 const validateSession = (req, res, next) => {
-    const sessionId = req.params.sessionId || req.headers['x-session-id'];
+    // Allow CORS preflight requests to pass through
+    if (req.method === "OPTIONS") {
+        return next();
+    }
+
+    const sessionId =
+        req.params?.sessionId ||
+        req.headers["x-session-id"] ||
+        req.body?.sessionId ||
+        req.query?.sessionId;
 
     if (!sessionId) {
         return res.status(400).json({
             success: false,
-            message: 'Session ID is required. Please provide x-session-id header.',
+            message: "Session ID is required.",
         });
     }
 
-    // Validate session ID format (UUID v4)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // UUID v4 validation
+    const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
     if (!uuidRegex.test(sessionId)) {
         return res.status(400).json({
             success: false,
-            message: 'Invalid session ID format. Expected UUID v4.',
+            message: "Invalid session ID format.",
         });
     }
 
     req.sessionId = sessionId;
+
     next();
 };
 

@@ -1,17 +1,20 @@
+// src/routes/order.routes.js
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order.controller');
+const { orderLimiter, standardLimiter } = require('../middleware/rateLimit');
+const validateOrder = require('../middleware/validateOrder');
 
-// Create order
-router.post('/', orderController.createOrder);
+// Create order with strict rate limiting
+router.post('/', orderLimiter, validateOrder, orderController.createOrder);
 
-// Get order by number (track order)
-router.get('/track/:orderNumber', orderController.trackOrder);
+// Track order
+router.get('/track/:orderNumber', standardLimiter, orderController.trackOrder);
 
 // Get orders by session
-router.get('/session/:sessionId', orderController.getOrdersBySession);
+router.get('/session/:sessionId', standardLimiter, orderController.getOrdersBySession);
 
 // Update order status
-router.patch('/:orderNumber/status', orderController.updateOrderStatus);
+router.patch('/:orderNumber/status', standardLimiter, orderController.updateOrderStatus);
 
 module.exports = router;

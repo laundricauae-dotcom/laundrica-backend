@@ -1,90 +1,29 @@
-// routes/contact.routes.js
+// src/routes/contact.routes.js
 const express = require('express');
 const router = express.Router();
-const emailService = require('../services/email.service');
+const logger = require('../utils/logger');
+const { standardLimiter } = require('../middleware/rateLimit');
 
-// Newsletter subscription endpoint
-router.post('/subscribe', async (req, res) => {
+router.post('/', standardLimiter, async (req, res, next) => {
     try {
-        const { email } = req.body;
+        const { name, email, phone, message, subject } = req.body;
 
-        if (!email) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email is required'
-            });
+        // Validate input
+        if (!name || !email || !message) {
+            const error = new Error('Name, email, and message are required');
+            error.statusCode = 400;
+            throw error;
         }
 
-        // Email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid email format'
-            });
-        }
-
-        // Send confirmation email to subscriber
-        await emailService.sendNewsletterConfirmation(email);
-
-        // Send notification to admin
-        await emailService.sendAdminNewsletterNotification(email);
+        // Log contact form submission
+        logger.info('Contact form submission:', { name, email, phone, subject });
 
         res.status(200).json({
             success: true,
-            message: 'Successfully subscribed to newsletter'
+            message: 'Contact form submitted successfully',
         });
-
     } catch (error) {
-        console.error('Newsletter subscription error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to subscribe. Please try again later.'
-        });
-    }
-});
-
-// Business service request endpoint
-router.post('/business-request', async (req, res) => {
-    try {
-        const { name, businessName, businessType, phone, email, message } = req.body;
-
-        // Validate required fields
-        if (!name || !businessType || !phone || !email) {
-            return res.status(400).json({
-                success: false,
-                error: 'Name, business type, phone, and email are required'
-            });
-        }
-
-        // Email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid email format'
-            });
-        }
-
-        const requestData = { name, businessName, businessType, phone, email, message };
-
-        // Send confirmation email to client
-        await emailService.sendBusinessRequestConfirmation(requestData);
-
-        // Send notification to admin
-        await emailService.sendAdminBusinessNotification(requestData);
-
-        res.status(200).json({
-            success: true,
-            message: 'Business request submitted successfully'
-        });
-
-    } catch (error) {
-        console.error('Business request error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to submit request. Please try again later.'
-        });
+        next(error);
     }
 });
 

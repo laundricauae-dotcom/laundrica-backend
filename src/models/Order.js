@@ -20,12 +20,52 @@ const orderItemSchema = new mongoose.Schema({
   metadata: { type: mongoose.Schema.Types.Mixed },
 });
 
+const marketingSchema = new mongoose.Schema({
+  utm: {
+    source: { type: String, default: '' },
+    medium: { type: String, default: '' },
+    campaign: { type: String, default: '' },
+    term: { type: String, default: '' },
+    content: { type: String, default: '' },
+  },
+  clickIds: {
+    gclid: { type: String, default: '' },
+    fbclid: { type: String, default: '' },
+    msclkid: { type: String, default: '' },
+  },
+  geo: {
+    ip: { type: String, default: '' },
+    country: { type: String, default: '' },
+    region: { type: String, default: '' },
+    city: { type: String, default: '' },
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    timezone: { type: String, default: '' },
+  },
+  browser: {
+    name: { type: String, default: '' },
+    version: { type: String, default: '' },
+    os: { type: String, default: '' },
+    deviceType: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    language: { type: String, default: '' },
+  },
+  page: {
+    referrer: { type: String, default: '' },
+    landingPage: { type: String, default: '' },
+    currentPage: { type: String, default: '' },
+  },
+  sessionId: { type: String, default: '' },
+  timestamp: { type: Date, default: Date.now },
+});
+
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
       type: String,
       required: true,
       unique: true,
+      index: true,
     },
     sessionId: {
       type: String,
@@ -63,6 +103,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'processing', 'completed', 'cancelled'],
       default: 'pending',
+      index: true,
     },
     customerInfo: {
       full_name: {
@@ -109,12 +150,37 @@ const orderSchema = new mongoose.Schema(
       enum: ['pending', 'paid', 'failed'],
       default: 'pending',
     },
+    // NEW: Marketing tracking data
+    marketing: {
+      type: marketingSchema,
+      default: () => ({}),
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    collection: 'orders',
+  }
 );
 
-// Index for faster queries
-orderSchema.index({ orderNumber: 1 });
-orderSchema.index({ sessionId: 1 });
+// Compound indexes for common queries
+orderSchema.index({ orderNumber: 1, sessionId: 1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ sessionId: 1, createdAt: -1 });
+orderSchema.index({ 'marketing.utm.source': 1 });
+orderSchema.index({ 'marketing.utm.campaign': 1 });
+orderSchema.index({ 'marketing.geo.country': 1 });
+
+// Static method to get order statistics
+orderSchema.statics.getStats = async function () {
+  return await this.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        totalRevenue: { $sum: '$total' }
+      }
+    }
+  ]);
+};
 
 module.exports = mongoose.model('Order', orderSchema);

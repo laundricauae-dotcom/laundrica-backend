@@ -1,94 +1,170 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const path = require('path');
-const compression = require('compression');
-const cors = require('cors');
+// src/index.js
 
-// Load env
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+const express = require("express");
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const path = require("path");
+const cors = require("cors");
 
-const app = express();
+const connectDB = require("./config/database");
+const validateEnv = require("./config/env");
+const redisClient = require("./config/redis");
 
-// ========== GLOBAL MIDDLEWARES ==========
-app.use(cors({
-  origin: '*',
-  credentials: true,
-}));
+const requestLogger = require("./middleware/logger");
+const errorHandler = require("./middleware/errorHandler");
+const attachMarketingData = require('./middleware/marketing');
+const sanitize = require("./middleware/sanitize");
+const logger = require("./utils/logger");
 
-app.use(compression({
-  level: 6,
-  threshold: 1024,
-}));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Request logging
-app.use((req, res, next) => {
-  console.log(`📝 ${req.method} ${req.url}`);
-  next();
+// ==============================
+// Load Environment Variables
+// ==============================
+dotenv.config({
+  path: path.resolve(__dirname, "../.env"),
 });
 
-// Routes
-const orderRoutes = require('./routes/order.routes');
-const cartRoutes = require('./routes/cart.routes');
-const productRoutes = require('./routes/product.routes');
-const serviceRoutes = require('./routes/service.routes');
-const webhookRoutes = require('./routes/webhook.routes');
-const contactRoutes = require('./routes/contact.routes');
+// Validate env
+validateEnv();
 
-// Register routes
-app.use('/api/orders', orderRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/services', serviceRoutes);
-app.use('/api/contact', contactRoutes);
-app.use('/webhook', webhookRoutes);
+// ==============================
+// Create Express App
+// ==============================
+const app = express();
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// ==============================
+// CORS Configuration
+// ==============================
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-Session-Id",
+      "X-Landing-Page",
+      "X-Original-Url",
+    ],
+    exposedHeaders: ["Content-Length"],
+  })
+);
+
+// ==============================
+// Body Parser
+// ==============================
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// ==============================
+// Request Logger
+// ==============================
+app.use(requestLogger);
+
+// ==============================
+// Marketing Data - Attach to all requests
+// ==============================
+app.use(attachMarketingData);
+
+// ==============================
+// Input Sanitizer
+// ==============================
+app.use(sanitize);
+
+// ==============================
+// Health Route
+// ==============================
+app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Server is running 🚀',
+    message: "Server is running 🚀",
+    environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });
 });
 
-// 404 handler
+// ==============================
+// Routes
+// ==============================
+const orderRoutes = require("./routes/order.routes");
+const cartRoutes = require("./routes/cart.routes");
+const productRoutes = require("./routes/product.routes");
+const serviceRoutes = require("./routes/service.routes");
+const contactRoutes = require("./routes/contact.routes");
+const webhookRoutes = require("./routes/webhook.routes");
+
+app.use("/api/orders", orderRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/contact", contactRoutes);
+app.use("/webhook", webhookRoutes);
+
+// ==============================
+// 404 Handler
+// ==============================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.method} ${req.url} not found`,
+    message: `Route ${req.method} ${req.originalUrl} not found`,
   });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-  res.status(500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-  });
-});
+// ==============================
+// Error Handler
+// ==============================
+app.use(errorHandler);
 
-// MongoDB connection
-mongoose
-  .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/laundrica')
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch((err) => console.error('❌ MongoDB connection error:', err));
+// ==============================
+// Start Server
+// ==============================
+async function startServer() {
+  try {
+    await connectDB();
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📦 API endpoints:`);
-  console.log(`   - POST   /api/orders - Create order (with Zoho Flow)`);
-  console.log(`   - GET    /api/orders/track/:id - Track order`);
-  console.log(`   - GET    /api/orders/session/:sessionId - Get orders by session`);
-  console.log(`   - PATCH  /api/orders/:orderNumber/status - Update order status`);
-  console.log(`   - POST   /webhook/zoho/order-update - Zoho webhook endpoint`);
-  console.log(`   - GET    /webhook/zoho/health - Zoho webhook health check`);
-});
+    await redisClient.connect();
+
+    try {
+      require("./workers");
+      logger.info("Workers initialized");
+    } catch (err) {
+      logger.warn("Workers not initialized:", err.message);
+    }
+
+    const PORT = process.env.PORT || 4000;
+
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
+
+      logger.info(`🚀 Server running on port ${PORT}`);
+      logger.info(`📦 Environment: ${process.env.NODE_ENV}`);
+    });
+
+    server.on("error", (err) => {
+      console.error("Server Error:", err);
+    });
+
+    const gracefulShutdown = async () => {
+      console.log("Shutting down...");
+
+      try {
+        await redisClient.disconnect();
+        await mongoose.disconnect();
+      } finally {
+        process.exit(0);
+      }
+    };
+
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 module.exports = app;
