@@ -1,101 +1,98 @@
-const Product = require('../models/Product');
-const ServiceItem = require('../models/ServiceItem');
+// controllers/product.controller.js
+const productService = require('../services/product.service');
+const logger = require('../utils/logger');
 
-exports.getAllProducts = async (req, res) => {
+exports.getAllProducts = async (req, res, next) => {
   try {
-    const { category, featured, search, page = 1, limit = 50 } = req.query;
+    const filters = req.query;
+    const result = await productService.getAllProducts(filters);
 
-    const query = { isActive: true };
-    if (category) query.category = category;
-    if (featured === 'true') query.isFeatured = true;
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    const products = await Product.find(query)
-      .sort('sortOrder')
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+exports.getProductById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const product = await productService.getProductById(id);
 
-    const total = await Product.countDocuments(query);
+    res.status(200).json({
+      success: true,
+      product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getProductBySlug = async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const product = await productService.getProductBySlug(slug);
+
+    res.status(200).json({
+      success: true,
+      product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getFeaturedProducts = async (req, res, next) => {
+  try {
+    const products = await productService.getFeaturedProducts();
 
     res.status(200).json({
       success: true,
       products,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total,
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-exports.getProductById = async (req, res) => {
+exports.getCategories = async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    res.status(200).json({ success: true, product });
+    const categories = await productService.getCategories();
+
+    res.status(200).json({
+      success: true,
+      categories,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-exports.getProductBySlug = async (req, res) => {
+exports.getServiceCategories = async (req, res, next) => {
   try {
-    const product = await Product.findOne({ slug: req.params.slug, isActive: true });
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    res.status(200).json({ success: true, product });
+    const services = await productService.getServiceCategories();
+
+    res.status(200).json({
+      success: true,
+      services,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-exports.getFeaturedProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ isFeatured: true, isActive: true })
-      .limit(8)
-      .sort('sortOrder');
-    res.status(200).json({ success: true, products });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-exports.getCategories = async (req, res) => {
-  try {
-    const categories = await Product.distinct('category');
-    res.status(200).json({ success: true, categories });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-exports.getServiceCategories = async (req, res) => {
-  try {
-    const serviceCategories = ['laundry', 'dry-cleaning', 'steam-pressing', 'shoe-cleaning', 'carpet-cleaning', 'curtain-cleaning'];
-    const services = await Product.find({ category: { $in: serviceCategories }, isActive: true })
-      .select('name slug category icon images description');
-    res.status(200).json({ success: true, services });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-exports.getServiceItemsForProduct = async (req, res) => {
+exports.getServiceItemsForProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    // ✅ SORT BY sortOrder ASCENDING (0, 1, 2, 3...)
-    const items = await ServiceItem.find({ serviceId: id, isActive: true }).sort('sortOrder');
-    res.status(200).json({ success: true, items });
+    const items = await productService.getServiceItemsForProduct(id);
+
+    res.status(200).json({
+      success: true,
+      items,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };

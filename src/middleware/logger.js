@@ -1,22 +1,34 @@
-/**
- * Request logging middleware
- * Logs all incoming requests for debugging
- */
-const logger = (req, res, next) => {
+// middleware/logger.js
+const logger = require('../utils/logger');
+
+const requestLogger = (req, res, next) => {
     const start = Date.now();
 
     // Log request
-    console.log(`📨 ${req.method} ${req.url} - ${new Date().toISOString()}`);
+    logger.info({
+        method: req.method,
+        url: req.url,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        sessionId: req.headers['x-session-id'],
+    });
 
     // Capture response
     const originalSend = res.send;
     res.send = function (data) {
         const duration = Date.now() - start;
-        console.log(`✅ ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+
+        logger.info({
+            method: req.method,
+            url: req.url,
+            status: res.statusCode,
+            duration: `${duration}ms`,
+        });
+
         originalSend.call(this, data);
     };
 
     next();
 };
 
-module.exports = logger;
+module.exports = requestLogger;

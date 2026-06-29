@@ -1,20 +1,21 @@
+// src/routes/webhook.routes.js
 const express = require('express');
 const router = express.Router();
+const logger = require('../utils/logger');
 
 // Health check for Zoho webhook verification
 router.get('/zoho/health', (req, res) => {
     res.status(200).json({
         status: 'ok',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     });
 });
 
 // Zoho webhook endpoint for order updates
 router.post('/zoho/order-update', async (req, res) => {
     try {
-        console.log('📨 Zoho webhook received:', JSON.stringify(req.body, null, 2));
+        logger.info('Zoho webhook received');
 
-        // Process webhook data here
         const { module, operation, data } = req.body;
 
         if (module === 'Deals' && data && data.length > 0) {
@@ -39,13 +40,13 @@ router.post('/zoho/order-update', async (req, res) => {
                     { status },
                     { new: true }
                 );
-                console.log(`✅ Order ${orderNumber} status updated from Zoho: ${status}`);
+                logger.info(`Order ${orderNumber} status updated from Zoho: ${status}`);
             }
         }
 
         res.sendStatus(200);
     } catch (error) {
-        console.error('❌ Webhook error:', error);
+        logger.error('Zoho webhook error:', error);
         res.sendStatus(500);
     }
 });

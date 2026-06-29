@@ -1,14 +1,17 @@
-/**
- * Global error handling middleware
- */
+// middleware/errorHandler.js
+const logger = require('../utils/logger');
+
 const errorHandler = (err, req, res, next) => {
-    // Log full error for debugging
-    console.error('❌ Error:', {
+    // Log error
+    logger.error({
         message: err.message,
         stack: err.stack,
         url: req.url,
         method: req.method,
         ip: req.ip,
+        body: req.body,
+        query: req.query,
+        params: req.params,
     });
 
     // Mongoose validation error
@@ -38,13 +41,35 @@ const errorHandler = (err, req, res, next) => {
         });
     }
 
-    // Default error
-    const statusCode = err.status || 500;
-    res.status(statusCode).json({
+    // JWT errors
+    if (err.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+            success: false,
+            message: 'Invalid token',
+        });
+    }
+
+    if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+            success: false,
+            message: 'Token expired',
+        });
+    }
+
+    // Custom error with statusCode
+    const statusCode = err.statusCode || 500;
+
+    // Never expose stack traces in production
+    const response = {
         success: false,
         message: err.message || 'Internal Server Error',
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-    });
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+        response.stack = err.stack;
+    }
+
+    res.status(statusCode).json(response);
 };
 
 module.exports = errorHandler;

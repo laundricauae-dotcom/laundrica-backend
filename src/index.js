@@ -1,104 +1,110 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const path = require('path');
-const compression = require('compression');
-const cors = require('cors');
+// src/index.js
 
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+const express = require("express");
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const path = require("path");
+const cors = require("cors");
 
-const app = express();
+const connectDB = require("./config/database");
+const validateEnv = require("./config/env");
+const redisClient = require("./config/redis");
 
-/* ===========================
-   CORS
-=========================== */
+const requestLogger = require("./middleware/logger");
+const errorHandler = require("./middleware/errorHandler");
+const attachMarketingData = require('./middleware/marketing');
+const sanitize = require("./middleware/sanitize");
+const logger = require("./utils/logger");
 
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Accept',
-      'X-Session-Id',
-    ],
-  })
-);
 
-/* ===========================
-   MIDDLEWARE
-=========================== */
-
-app.use(
-  compression({
-    level: 6,
-    threshold: 1024,
-  })
-);
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-/* ===========================
-   LOGGER
-=========================== */
-
-app.use((req, res, next) => {
-  console.log(`📝 ${req.method} ${req.originalUrl}`);
-  next();
+// ==============================
+// Load Environment Variables
+// ==============================
+dotenv.config({
+  path: path.resolve(__dirname, "../.env"),
 });
 
-/* ===========================
-   ROUTES
-=========================== */
+// Validate env
+validateEnv();
 
-const orderRoutes = require('./routes/order.routes');
-const cartRoutes = require('./routes/cart.routes');
-const productRoutes = require('./routes/product.routes');
-const serviceRoutes = require('./routes/service.routes');
-const webhookRoutes = require('./routes/webhook.routes');
-const contactRoutes = require('./routes/contact.routes');
+// ==============================
+// Create Express App
+// ==============================
+const app = express();
 
-app.use('/api/orders', orderRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/services', serviceRoutes);
-app.use('/api/contact', contactRoutes);
-app.use('/webhook', webhookRoutes);
+// ==============================
+// CORS Configuration
+// ==============================
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000" || "https://laundrica-l2b5.vercel.app",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-Session-Id",
+      "X-Landing-Page",
+      "X-Original-Url",
+    ],
+    exposedHeaders: ["Content-Length"],
+  })
+);
 
-/* ===========================
-   HEALTH CHECK
-=========================== */
+// ==============================
+// Body Parser
+// ==============================
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-app.get('/api/health', (req, res) => {
+// ==============================
+// Request Logger
+// ==============================
+app.use(requestLogger);
+
+// ==============================
+// Marketing Data - Attach to all requests
+// ==============================
+app.use(attachMarketingData);
+
+// ==============================
+// Input Sanitizer
+// ==============================
+app.use(sanitize);
+
+// ==============================
+// Health Route
+// ==============================
+app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Server is running 🚀',
-    mongodb:
-      mongoose.connection.readyState === 1
-        ? 'connected'
-        : 'disconnected',
+    message: "Server is running 🚀",
+    environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });
 });
 
-/* ===========================
-   ROOT
-=========================== */
+// ==============================
+// Routes
+// ==============================
+const orderRoutes = require("./routes/order.routes");
+const cartRoutes = require("./routes/cart.routes");
+const productRoutes = require("./routes/product.routes");
+const serviceRoutes = require("./routes/service.routes");
+const contactRoutes = require("./routes/contact.routes");
+const webhookRoutes = require("./routes/webhook.routes");
 
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Laundrica Backend API',
-  });
-});
+app.use("/api/orders", orderRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/contact", contactRoutes);
+app.use("/webhook", webhookRoutes);
 
-/* ===========================
-   404 HANDLER
-=========================== */
-
+// ==============================
+// 404 Handler
+// ==============================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -106,38 +112,59 @@ app.use((req, res) => {
   });
 });
 
-/* ===========================
-   ERROR HANDLER
-=========================== */
+// ==============================
+// Error Handler
+// ==============================
+app.use(errorHandler);
 
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
+// ==============================
+// Start Server
+// ==============================
+async function startServer() {
+  try {
+    await connectDB();
 
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-  });
-});
+    await redisClient.connect();
 
-/* ===========================
-   DATABASE + SERVER START
-=========================== */
+    try {
+      require("./workers");
+      logger.info("Workers initialized");
+    } catch (err) {
+      logger.warn("Workers not initialized:", err.message);
+    }
 
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ Connected to MongoDB');
+    const PORT = process.env.PORT || 4000;
 
-    const PORT = process.env.PORT || 5000;
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Health: /api/health`);
+      logger.info(`🚀 Server running on port ${PORT}`);
+      logger.info(`📦 Environment: ${process.env.NODE_ENV}`);
     });
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
+
+    server.on("error", (err) => {
+      console.error("Server Error:", err);
+    });
+
+    const gracefulShutdown = async () => {
+      console.log("Shutting down...");
+
+      try {
+        await redisClient.disconnect();
+        await mongoose.disconnect();
+      } finally {
+        process.exit(0);
+      }
+    };
+
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
+  } catch (err) {
+    console.error("Failed to start server:", err);
     process.exit(1);
-  });
+  }
+}
+
+startServer();
 
 module.exports = app;

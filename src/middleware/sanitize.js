@@ -1,7 +1,4 @@
-/**
- * Input sanitization middleware
- * Prevents XSS and injection attacks
- */
+// middleware/sanitize.js
 const sanitize = (req, res, next) => {
     const sanitizeString = (str) => {
         if (typeof str !== 'string') return str;
@@ -10,7 +7,8 @@ const sanitize = (req, res, next) => {
             .replace(/[<>]/g, '') // Remove < and >
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+            .replace(/'/g, '&#39;')
+            .slice(0, 1000); // Limit length
     };
 
     const sanitizeObject = (obj) => {
@@ -42,6 +40,11 @@ const sanitize = (req, res, next) => {
     // Sanitize query parameters
     if (req.query) {
         req.query = sanitizeObject(req.query);
+    }
+
+    // Sanitize params
+    if (req.params) {
+        req.params = sanitizeObject(req.params);
     }
 
     next();
